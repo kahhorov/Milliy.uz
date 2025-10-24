@@ -1,96 +1,38 @@
-import { useState } from "react";
-import { FaEye } from "react-icons/fa";
-import { FaEyeSlash } from "react-icons/fa";
+import React, { useState } from "react";
+import { ThemeProvider, createTheme } from "@mui/material/styles";
+import Lists from "./components/Lists";
+import { Tabs, Tab, Box } from "@mui/material";
+import Davomat from "./components/Davomat";
+import DateStatus from "./components/DateStatus";
 
-import "./index.css";
+export default function App() {
+  const [darkMode, setDarkMode] = useState(false);
+  const [tab, setTab] = useState(0);
 
-function App() {
-  const [followers, setFollowers] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false); // 👁 ko‘zcha holati
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!username || !password || !followers) {
-      alert("Iltimos, barcha maydonlarni to‘ldiring!");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch("http://localhost:3000/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, followers }),
-      });
-
-      const data = await res.json();
-
-      if (data.ok) {
-        alert("✅ So‘rov yuborildi!");
-        setUsername("");
-        setPassword("");
-        setFollowers("");
-      } else {
-        alert("❌ Xatolik yuz berdi!");
-      }
-    } catch (err) {
-      alert("⚠️ Serverga ulanishda xatolik!");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const theme = createTheme({
+    palette: { mode: darkMode ? "dark" : "light" },
+  });
 
   return (
-    <div className="container">
-      <h1>Instagram Follower So‘rov</h1>
-      <form onSubmit={handleSubmit}>
-        <label>Follower sonini tanlang:</label>
-        <select
-          value={followers}
-          onChange={(e) => setFollowers(e.target.value)}
+    <ThemeProvider theme={theme}>
+      <Box>
+        <Tabs
+          value={tab}
+          onChange={(e, v) => setTab(v)}
+          centered
+          sx={{ mb: 2 }}
         >
-          <option value="">Tanlang</option>
-          <option value="100">100 followers</option>
-          <option value="500">500 followers</option>
-          <option value="1000">1000 followers</option>
-          <option value="1500">1500 followers</option>
-        </select>
+          <Tab label="📋 O‘quvchilar" />
+          <Tab label="🕒 Davomat" />
+          <Tab label="🕒 Davomat Tarixi" />
+        </Tabs>
 
-        <label>Instagram Username:</label>
-        <input
-          type="text"
-          placeholder="username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-        />
-
-        <label>Instagram Parol:</label>
-        <div className="password-wrapper">
-          <input
-            type={showPassword ? "text" : "password"} // 👁 password ko‘rsatish/tinch holat
-            placeholder="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <span
-            className="toggle-icon cursor-pointer "
-            onClick={() => setShowPassword(!showPassword)}
-          >
-            <span className="cursor-pointer" style={{ margin: "10px " }}>
-              {showPassword ? <FaEyeSlash /> : <FaEye />}
-            </span>
-          </span>
-        </div>
-
-        <button type="submit" disabled={loading}>
-          {loading ? "Tekshrilmoqda..." : "Tekshrish"}
-        </button>
-      </form>
-    </div>
+        {tab === 0 && <Lists darkMode={darkMode} setDarkMode={setDarkMode} />}
+        {tab === 1 && <Davomat darkMode={darkMode} setDarkMode={setDarkMode} />}
+        {tab === 2 && (
+          <DateStatus darkMode={darkMode} setDarkMode={setDarkMode} />
+        )}
+      </Box>
+    </ThemeProvider>
   );
 }
-
-export default App;
