@@ -17,3 +17,4 @@ If you are developing a production application, we recommend using TypeScript wi
 "# Instagram-Pro" 
 "# insta-pro-smm" 
 "# Milliy.uz" 
+"# Milliy.uz" 
