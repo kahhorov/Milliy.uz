@@ -20,7 +20,7 @@ import { ThemeProvider, createTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import axios from "axios";
 
-const API_URL = "http://localhost:3001/users";
+const API_URL = "https://milliy-server-1.onrender.com/users";
 
 function Lists({ darkMode, setDarkMode }) {
   const [rows, setRows] = useState([]);

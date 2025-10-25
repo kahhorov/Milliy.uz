@@ -18,7 +18,7 @@ import {
 } from "@mui/material";
 import axios from "axios";
 
-const HISTORY_URL = "http://localhost:3001/attendanceHistory";
+const HISTORY_URL = "https://milliy-server-1.onrender.com/attendanceHistory";
 
 export default function DateStatus() {
   const [history, setHistory] = useState([]);

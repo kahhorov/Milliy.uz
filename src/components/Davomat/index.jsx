@@ -16,8 +16,8 @@ import "react-toastify/dist/ReactToastify.css";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 
-const API_URL = "http://localhost:3001/users";
-const HISTORY_URL = "http://localhost:3001/attendanceHistory";
+const API_URL = "https://milliy-server-1.onrender.com/users";
+const HISTORY_URL = "https://milliy-server-1.onrender.com/attendanceHistory";
 
 export default function Attendance({ darkMode, setDarkMode }) {
   const [rows, setRows] = useState([]);
