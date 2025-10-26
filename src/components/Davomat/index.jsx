@@ -6,64 +6,53 @@ import {
   MenuItem,
   Typography,
   Button,
-  Switch,
+  useTheme,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
-import { LightMode, DarkMode, Save } from "@mui/icons-material";
+import { Save } from "@mui/icons-material";
 import axios from "axios";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
+import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 
-const API_URL = "https://milliy-server-1.onrender.com/users";
-const HISTORY_URL = "https://milliy-server-1.onrender.com/attendanceHistory";
+const API_URL = "https://server-supabase-3k3k.onrender.com/users";
+const HISTORY_URL =
+  "https://server-supabase-3k3k.onrender.com/attendanceHistory";
 
-export default function Attendance({ darkMode, setDarkMode }) {
+export default function Davomat({ darkMode }) {
+  const theme = useTheme();
   const [rows, setRows] = useState([]);
-  const [filter, setFilter] = useState({
-    year: "",
-    month: "",
-    day: "",
-    time: "",
-  });
-
-  // 🔹 Front-endda qaysi tugma bosilganini saqlaymiz
+  const [filter, setFilter] = useState({ group: "", day: "" });
   const [disabledStatus, setDisabledStatus] = useState({});
 
-  // 🔹 Foydalanuvchilarni yuklash
   useEffect(() => {
     axios.get(API_URL).then((res) => setRows(res.data));
   }, []);
 
-  // 🔹 Vaqtlarni olish
-  const times = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.time).filter(Boolean))),
+  const groups = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.group).filter(Boolean))),
     [rows]
   );
 
-  // 🔹 Filtrlash
   const filteredRows = useMemo(() => {
-    if (!filter.year || !filter.month || !filter.day || !filter.time) return [];
+    if (!filter.group || !filter.day) return [];
     return rows
-      .filter((r) => {
-        const matchesYear = Number(r.year) === Number(filter.year);
-        const matchesMonth = r.month === filter.month;
-        const matchesTime = r.time === filter.time;
-        const matchesDay =
-          Array.isArray(r.weekDays) && r.weekDays.includes(filter.day);
-        return matchesYear && matchesMonth && matchesTime && matchesDay;
-      })
+      .filter(
+        (r) =>
+          r.group === filter.group &&
+          Array.isArray(r.weekDays) &&
+          r.weekDays.includes(filter.day)
+      )
       .map((r, i) => ({ ...r, order: i + 1 }));
   }, [rows, filter]);
 
-  // 🔹 Keldi / Kelmadi tugmasi bosilganda front-endda disabled qilamiz
   const handleAttendance = (id, status) => {
     setDisabledStatus((prev) => ({ ...prev, [id]: status }));
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
   };
 
-  // 🔹 Saqlash tugmasi bosilganda DB-ga yozish va buttonlarni reset qilish
   const handleSaveAttendance = async () => {
     if (filteredRows.length === 0) {
       toast.warning("Avval guruhni tanlang va davomat belgilang.");
@@ -75,44 +64,47 @@ export default function Attendance({ darkMode, setDarkMode }) {
       date.getMonth() + 1
     ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
-    const record = {
-      id: Date.now(),
-      date: formattedDate,
-      year: filter.year,
-      month: filter.month,
-      day: filter.day,
-      time: filter.time,
-      students: filteredRows.map((r) => ({
-        fullName: r.fullName,
-        group: r.group,
-        status: r.status || "belgilanmagan",
-      })),
-    };
+    const students = filteredRows.map((r, index) => ({
+      id: index + 1,
+      fullName: r.fullName,
+      group: r.group,
+      status: r.status || "belgilanmagan",
+    }));
 
     try {
-      await axios.post(HISTORY_URL, record);
+      const { data: history } = await axios.get(HISTORY_URL);
+      const newId =
+        history.length > 0 ? Math.max(...history.map((h) => h.id)) + 1 : 1;
 
-      // 🔹 Saqlangach statuslarni reset qilamiz
-      setDisabledStatus({});
-      setRows((prev) =>
-        prev.map((r) =>
-          r.time === filter.time &&
-          r.month === filter.month &&
-          r.year === filter.year &&
-          Array.isArray(r.weekDays) &&
-          r.weekDays.includes(filter.day)
-            ? { ...r, status: "" }
-            : r
-        )
+      const alreadyExists = history.some(
+        (item) =>
+          item.date === formattedDate &&
+          item.group === filter.group &&
+          item.day === filter.day
       );
 
-      toast.success("Davomat muvaffaqiyatli saqlandi va buttonlar aktiv!");
+      if (alreadyExists) {
+        toast.warning("Bu guruhning bugungi davomati allaqachon olindi!");
+        return;
+      }
+
+      const record = {
+        id: String(newId),
+        date: formattedDate,
+        group: filter.group,
+        day: filter.day,
+        students,
+      };
+
+      await axios.post(HISTORY_URL, record);
+      setDisabledStatus({});
+      toast.success("Davomat muvaffaqiyatli saqlandi!");
     } catch (error) {
+      console.error("Xatolik:", error);
       toast.error("Xatolik: Davomat saqlanmadi!");
     }
   };
 
-  // 🔹 Jadval ustunlari
   const columns = [
     { field: "order", headerName: "№", width: 80 },
     { field: "fullName", headerName: "Ism Familiya", flex: 1 },
@@ -120,46 +112,52 @@ export default function Attendance({ darkMode, setDarkMode }) {
     {
       field: "status",
       headerName: "Davomat",
-      width: 220,
+      flex: 1.6,
       renderCell: (params) => (
-        <Stack direction="row" spacing={1} sx={{ width: "100%" }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{
+            width: "100%",
+            "& .MuiButton-root": {
+              fontSize: "12px",
+              minWidth: "100px",
+              flex: 1,
+              textTransform: "none",
+              whiteSpace: "nowrap",
+              padding: "6px 8px",
+            },
+          }}
+        >
           <Button
-            fullWidth
             variant="contained"
             color="success"
             disabled={disabledStatus[params.row.id] === "keldi"}
             onClick={() => handleAttendance(params.row.id, "keldi")}
           >
-            <CheckIcon /> Keldi
+            <CheckIcon sx={{ mr: 0.5 }} /> Keldi
           </Button>
           <Button
-            fullWidth
             variant="contained"
             color="error"
             disabled={disabledStatus[params.row.id] === "kelmadi"}
             onClick={() => handleAttendance(params.row.id, "kelmadi")}
           >
-            <CloseIcon /> Kelmadi
+            <CloseIcon sx={{ mr: 0.5 }} /> Kelmadi
+          </Button>
+          <Button
+            variant="outlined"
+            color="warning"
+            disabled={disabledStatus[params.row.id] === ""}
+            onClick={() => handleAttendance(params.row.id, "")}
+          >
+            <RemoveCircleOutlineIcon sx={{ mr: 0.5 }} /> Tanlanmagan
           </Button>
         </Stack>
       ),
     },
   ];
 
-  const months = [
-    "Yanvar",
-    "Fevral",
-    "Mart",
-    "Aprel",
-    "May",
-    "Iyun",
-    "Iyul",
-    "Avgust",
-    "Sentabr",
-    "Oktabr",
-    "Noyabr",
-    "Dekabr",
-  ];
   const days = [
     "Dushanba",
     "Seshanba",
@@ -173,63 +171,47 @@ export default function Attendance({ darkMode, setDarkMode }) {
   return (
     <Paper
       sx={{
-        p: 3,
-        bgcolor: darkMode ? "#121212" : "#fff",
-        color: darkMode ? "#fff" : "#000",
         minHeight: "100vh",
+        bgcolor: theme.palette.background.default,
+        color: theme.palette.text.primary,
+        transition: "all 0.3s ease",
       }}
+      elevation={0}
     >
-      <ToastContainer position="top-right" autoClose={2500} theme="colored" />
+      <ToastContainer
+        position="top-right"
+        autoClose={2500}
+        theme={darkMode ? "dark" : "light"}
+      />
 
-      {/* 🔹 Sarlavha va rejim */}
-      <Stack
-        direction="row"
-        justifyContent="space-between"
-        alignItems="center"
-        mb={3}
-      >
-        <Typography variant="h5" fontWeight="bold">
-          Guruh Davomat Tizimi
-        </Typography>
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <LightMode />
-          <Switch
-            checked={darkMode}
-            onChange={() => setDarkMode(!darkMode)}
-            color="default"
-          />
-          <DarkMode />
-        </Stack>
-      </Stack>
+      <Typography variant="h5" fontWeight="bold" mb={3}>
+        Guruh Davomat Tizimi
+      </Typography>
 
-      {/* 🔹 Filtrlar */}
+      {/* Filtrlar */}
       <Stack
-        direction="row"
+        direction={{ xs: "column", sm: "row" }}
         spacing={2}
         mb={2}
         flexWrap="wrap"
-        sx={{ "& .MuiTextField-root": { flex: 1, minWidth: "180px" } }}
+        sx={{
+          "& .MuiTextField-root": { flex: 1, minWidth: "180px" },
+        }}
       >
         <TextField
-          label="Yil"
-          type="number"
-          fullWidth
-          value={filter.year}
-          onChange={(e) => setFilter({ ...filter, year: e.target.value })}
-        />
-        <TextField
           select
-          label="Oy"
+          label="Guruh"
           fullWidth
-          value={filter.month}
-          onChange={(e) => setFilter({ ...filter, month: e.target.value })}
+          value={filter.group}
+          onChange={(e) => setFilter({ ...filter, group: e.target.value })}
         >
-          {months.map((m) => (
-            <MenuItem key={m} value={m}>
-              {m}
+          {groups.map((g) => (
+            <MenuItem key={g} value={g}>
+              {g}
             </MenuItem>
           ))}
         </TextField>
+
         <TextField
           select
           label="Hafta kuni"
@@ -240,20 +222,6 @@ export default function Attendance({ darkMode, setDarkMode }) {
           {days.map((d) => (
             <MenuItem key={d} value={d}>
               {d}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          select
-          label="Vaqt"
-          fullWidth
-          value={filter.time}
-          onChange={(e) => setFilter({ ...filter, time: e.target.value })}
-          autoComplete="off"
-        >
-          {times.map((t) => (
-            <MenuItem key={t} value={t}>
-              {t}
             </MenuItem>
           ))}
         </TextField>
@@ -269,19 +237,38 @@ export default function Attendance({ darkMode, setDarkMode }) {
         </Button>
       </Stack>
 
-      {/* 🔹 Jadval */}
+      {/* Jadval responsive */}
       {filteredRows.length > 0 ? (
-        <div style={{ height: 500, width: "100%" }}>
-          <DataGrid
-            rows={filteredRows}
-            columns={columns}
-            pageSize={10}
-            disableRowSelectionOnClick
-          />
+        <div
+          style={{
+            width: "100%",
+            overflowX: "auto",
+            borderRadius: 8,
+            backgroundColor: theme.palette.background.paper,
+          }}
+        >
+          <div style={{ minWidth: 900, height: 500 }}>
+            <DataGrid
+              rows={filteredRows}
+              columns={columns}
+              pageSize={10}
+              disableRowSelectionOnClick
+              sx={{
+                color: theme.palette.text.primary,
+                border: 0,
+                "& .MuiDataGrid-columnHeaders": {
+                  backgroundColor: darkMode ? "#333" : "#f5f5f5",
+                },
+                "& .MuiDataGrid-cell": {
+                  borderColor: darkMode ? "#444" : "#ddd",
+                },
+              }}
+            />
+          </div>
         </div>
       ) : (
         <Typography sx={{ mt: 3, textAlign: "center" }}>
-          Iltimos, <b>yil, oy, hafta kuni</b> va <b>vaqtni</b> tanlang.
+          Iltimos, <b>guruh</b> va <b>hafta kunini</b> tanlang.
         </Typography>
       )}
     </Paper>

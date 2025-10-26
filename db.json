@@ -1,117 +1,164 @@
 {
   "users": [
     {
-      "id": "04d7",
+      "id": "3959",
       "order": 1,
+      "fullName": "Asadbek Muxtarjonov",
+      "phoneNumber": "916558655",
+      "group": "Guruh-1",
+      "weekDays": ["Dushanba", "Chorshanba", "Juma"],
+      "checked": false
+    },
+    {
+      "id": "dacc",
+      "order": 2,
       "fullName": "Sherjahon Qahhorov",
       "phoneNumber": "916612705",
-      "time": "18:00",
-      "month": "Oktabr",
-      "year": 2025,
+      "group": "Guruh-2",
       "weekDays": ["Seshanba", "Payshanba", "Shanba"],
       "checked": false
     },
     {
-      "id": "3e6d",
-      "order": 2,
-      "fullName": "Muhammadyaxyo Azamov",
-      "phoneNumber": "909877334",
-      "time": "18:00",
-      "month": "Oktabr",
-      "year": 2025,
-      "weekDays": ["Seshanba", "Payshanba", "Shanba"],
-      "checked": false,
-      "status": "keldi"
+      "id": "4d2c",
+      "order": 3,
+      "fullName": "Muhammadyusuf Azamov",
+      "phoneNumber": "+998913345682",
+      "group": "Guruh-4",
+      "weekDays": ["Shanba", "Payshanba", "Seshanba"],
+      "checked": false
     },
     {
-      "id": "6644",
+      "id": "c6aa",
       "order": 4,
-      "fullName": "Mohinur Qahhorov",
-      "phoneNumber": "998457548",
-      "time": "14:00",
-      "month": "Avgust",
-      "year": 2025,
-      "weekDays": ["Seshanba", "Payshanba", "Shanba"],
-      "checked": true
+      "fullName": "Muhammadali Aliyev",
+      "phoneNumber": "8846378954",
+      "group": "Guruh-1",
+      "weekDays": ["Dushanba", "Chorshanba", "Juma"],
+      "checked": false
     },
     {
-      "id": "ab3a",
+      "id": "60e3",
       "order": 5,
-      "fullName": "Solijon Ikromov",
-      "phoneNumber": "904837657",
-      "time": "14:00",
-      "month": "Avgust",
-      "year": 2025,
-      "weekDays": ["Seshanba", "Payshanba", "Shanba"],
-      "checked": false
-    },
-    {
-      "id": "7503",
-      "order": 6,
-      "fullName": "Asadbek Muxtarjonov",
-      "phoneNumber": "906558655",
-      "time": "14:00",
-      "month": "Avgust",
-      "year": 2025,
-      "weekDays": ["Seshanba", "Payshanba", "Shanba"],
-      "checked": false
-    },
-    {
-      "id": "cdf5",
-      "order": 7,
-      "fullName": "Bexruz",
+      "fullName": "Bexruz Abdurashidov",
       "phoneNumber": "507733403",
-      "time": "14:00",
-      "month": "Avgust",
-      "year": 2025,
-      "weekDays": ["Seshanba", "Payshanba", "Shanba"],
-      "checked": false,
-      "status": "keldi"
+      "group": "Guruh-1",
+      "weekDays": ["Dushanba", "Chorshanba", "Juma"],
+      "checked": false
     },
     {
-      "id": "32e7",
+      "id": "1a0c",
+      "order": 7,
+      "fullName": "Solijon Ikromov",
+      "phoneNumber": "773621274",
+      "group": "Guruh-3",
+      "weekDays": [
+        "Dushanba",
+        "Seshanba",
+        "Chorshanba",
+        "Payshanba",
+        "Juma",
+        "Shanba"
+      ],
+      "checked": false
+    },
+    {
+      "id": "6942",
       "order": 8,
-      "fullName": "Abdumajit Sodiqov",
-      "phoneNumber": "886432576",
-      "time": "14:00",
-      "month": "Avgust",
-      "year": 2025,
-      "weekDays": ["Dushanba", "Chorshanba", "Juma"],
+      "fullName": "Muhammadjon Nurmuhhamadev",
+      "phoneNumber": "4738828774",
+      "group": "Guruh-3",
+      "weekDays": [
+        "Dushanba",
+        "Seshanba",
+        "Chorshanba",
+        "Payshanba",
+        "Juma",
+        "Shanba"
+      ],
       "checked": false
     },
     {
-      "id": "3a44",
+      "id": "2bd5",
       "order": 9,
-      "fullName": "Donyor Qayumov",
-      "phoneNumber": "774637530",
-      "time": "14:00",
-      "month": "Avgust",
-      "year": 2025,
-      "weekDays": ["Dushanba", "Chorshanba", "Juma"],
+      "fullName": "Muhammadyaxyo Sodiqov",
+      "phoneNumber": "+998907754632",
+      "group": "Guruh-3",
+      "weekDays": [
+        "Dushanba",
+        "Seshanba",
+        "Chorshanba",
+        "Payshanba",
+        "Juma",
+        "Shanba"
+      ],
       "checked": false
     },
     {
-      "id": "6682",
+      "id": "ac3d",
       "order": 10,
-      "fullName": "Baxromjon Nabiyev ",
-      "phoneNumber": "908832764",
-      "time": "14:00",
-      "month": "Avgust",
-      "year": 2025,
+      "fullName": "Mo'hriddin Yo'ldashaliyev",
+      "phoneNumber": "864325809",
+      "group": "Guruh-4",
+      "weekDays": ["Shanba", "Payshanba", "Seshanba"],
+      "checked": false
+    },
+    {
+      "id": "7454",
+      "order": 11,
+      "fullName": "Zo'hriddin Alijonov",
+      "phoneNumber": "883625608",
+      "group": "Guruh-2",
+      "weekDays": ["Seshanba", "Payshanba", "Shanba"],
+      "checked": false
+    },
+    {
+      "id": "5bc9",
+      "order": 11,
+      "fullName": "Muhammadlaziz Ibrohimov",
+      "phoneNumber": "+998908877382",
+      "group": "Guruh-1",
       "weekDays": ["Dushanba", "Chorshanba", "Juma"],
       "checked": false
     },
     {
-      "id": "7dcc",
-      "order": 11,
-      "fullName": "Nazarbek Musajonov",
-      "phoneNumber": "886723436",
-      "time": "14:00",
-      "month": "Avgust",
-      "year": 2025,
-      "weekDays": ["Dushanba", "Chorshanba", "Juma"],
+      "id": "cddd",
+      "order": 12,
+      "fullName": "Dilnavoz",
+      "phoneNumber": "8328238224",
+      "group": "Guruh-2",
+      "weekDays": ["Seshanba", "Payshanba", "Shanba"],
       "checked": false
     }
   ],
-  "attendanceHistory": []
+  "attendanceHistory": [
+    {
+      "id": "2",
+      "date": "2025-10-26",
+      "group": "Guruh-2",
+      "day": "Seshanba",
+      "students": [
+        {
+          "id": "1",
+          "fullName": "Sherjahon Qahhorov",
+          "group": "Guruh-2",
+          "status": "keldi",
+          "late": ""
+        },
+        {
+          "id": "2",
+          "fullName": "Zo'hriddin Alijonov",
+          "group": "Guruh-2",
+          "status": "kechikdi",
+          "late": "10"
+        },
+        {
+          "id": 3,
+          "fullName": "Dilnavoz",
+          "group": "Guruh-2",
+          "status": "keldi"
+        }
+      ],
+      "order": 2
+    }
+  ]
 }

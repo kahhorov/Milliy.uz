@@ -3,43 +3,41 @@ import {
   Paper,
   Stack,
   TextField,
-  Button,
   IconButton,
   Typography,
   Checkbox,
-  Switch,
   MenuItem,
   Select,
   InputLabel,
   FormControl,
   FormControlLabel,
+  useTheme,
+  Button,
 } from "@mui/material";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
-import { Edit, Delete, LightMode, DarkMode, Search } from "@mui/icons-material";
-import { ThemeProvider, createTheme } from "@mui/material/styles";
-import useMediaQuery from "@mui/material/useMediaQuery";
+import { Edit, Delete } from "@mui/icons-material";
 import axios from "axios";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
-const API_URL = "https://milliy-server-1.onrender.com/users";
+const API_URL = "https://server-supabase-3k3k.onrender.com/users";
 
-function Lists({ darkMode, setDarkMode }) {
+function Lists({ darkMode }) {
+  const theme = useTheme();
+
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState({
     fullName: "",
     phoneNumber: "",
-    time: "",
-    month: "",
-    year: new Date().getFullYear(),
+    group: "",
     weekDays: [],
   });
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
-  const [filterMonth, setFilterMonth] = useState("Barchasi");
-  const [showCheckedOnly, setShowCheckedOnly] = useState(false); // ✅ Faqat belgilanganni ko‘rsatish
-  const isSmall = useMediaQuery("(max-width:600px)");
+  const [showCheckedOnly, setShowCheckedOnly] = useState(false);
+  const [groupDays, setGroupDays] = useState({});
 
-  // 🔹 Haftalik kunlar
   const days = [
     "Dushanba",
     "Seshanba",
@@ -50,118 +48,180 @@ function Lists({ darkMode, setDarkMode }) {
     "Yakshanba",
   ];
 
-  // 🔹 Ma’lumotlarni olish
+  // Ma'lumot olish
   const getData = async () => {
-    const res = await axios.get(API_URL);
-    const sorted = res.data.sort((a, b) => a.order - b.order);
-    setRows(sorted);
+    try {
+      const res = await axios.get(API_URL);
+      const sorted = res.data.sort((a, b) => a.order - b.order);
+      setRows(sorted);
+
+      const savedDays = {};
+      sorted.forEach((r) => {
+        if (r.group && r.weekDays?.length) savedDays[r.group] = r.weekDays;
+      });
+      setGroupDays(savedDays);
+    } catch (error) {
+      toast.error("Ma'lumotlarni olishda xatolik yuz berdi.", {
+        position: "top-right",
+      });
+    }
   };
 
   useEffect(() => {
     getData();
   }, []);
 
-  // 🔹 Ismni formatlash
+  // Form inputlarini formatlash
   const formatName = (name) =>
     name
       .split(" ")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
       .join(" ");
 
-  // 🔹 Input o‘zgarishi
-  const handleChange = (e) => {
-    let value = e.target.value;
-    if (e.target.name === "fullName") value = formatName(value);
-    setForm({ ...form, [e.target.name]: value });
+  const formatGroup = (group) => {
+    if (!group) return "";
+    return group.charAt(0).toUpperCase() + group.slice(1).toLowerCase();
   };
 
-  // 🔹 Qo‘shish yoki tahrirlash
+  const handleChange = (e) => {
+    let value = e.target.value;
+    const name = e.target.name;
+
+    if (name === "fullName") value = formatName(value);
+    if (name === "group") {
+      value = formatGroup(value);
+      // Guruhga mos hafta kunlarini avtomatik to'ldirish
+      if (groupDays[value]) {
+        setForm((prev) => ({
+          ...prev,
+          [name]: value,
+          weekDays: groupDays[value],
+        }));
+        return;
+      } else {
+        setForm((prev) => ({ ...prev, [name]: value, weekDays: [] }));
+        return;
+      }
+    }
+
+    if (name === "weekDays") {
+      setForm((prev) => ({
+        ...prev,
+        [name]: typeof value === "string" ? value.split(",") : value,
+      }));
+      return;
+    }
+
+    setForm({ ...form, [name]: value });
+  };
+
+  // Qo'shish yoki tahrirlash
   const handleAdd = async () => {
     if (
       !form.fullName ||
       !form.phoneNumber ||
-      !form.time ||
-      !form.month ||
-      !form.year ||
+      !form.group ||
       form.weekDays.length === 0
-    )
-      return alert("Iltimos, barcha maydonlarni to‘ldiring!");
-
-    if (editingId) {
-      await axios.patch(`${API_URL}/${editingId}`, form);
-      setEditingId(null);
-    } else {
-      const newOrder = rows.length + 1;
-      const newUser = {
-        order: newOrder,
-        ...form,
-        checked: false,
-      };
-      await axios.post(API_URL, newUser);
+    ) {
+      toast.error("Iltimos, barcha maydonlarni to'ldiring!", {
+        position: "top-right",
+      });
+      return;
     }
 
-    await getData();
-    setForm({
-      fullName: "",
-      phoneNumber: "",
-      time: "",
-      month: "",
-      year: new Date().getFullYear(),
-      weekDays: [],
-    });
+    try {
+      if (editingId) {
+        await axios.patch(`${API_URL}/${editingId}`, form);
+        toast.success("Ma'lumot muvaffaqiyatli tahrirlandi!", {
+          position: "top-right",
+        });
+        setEditingId(null);
+      } else {
+        const newOrder = rows.length + 1;
+        const newUser = { order: newOrder, ...form, checked: false };
+        await axios.post(API_URL, newUser);
+
+        setGroupDays((prev) => ({
+          ...prev,
+          [form.group]: form.weekDays,
+        }));
+
+        toast.success("O'quvchi muvaffaqiyatli qo'shildi!", {
+          position: "top-right",
+        });
+      }
+
+      await getData();
+      setForm({
+        fullName: "",
+        phoneNumber: "",
+        group: "",
+        weekDays: [],
+      });
+    } catch (error) {
+      toast.error("Xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.", {
+        position: "top-right",
+      });
+    }
   };
 
-  // 🔹 Belgilash
   const toggleCheck = async (id) => {
     const user = rows.find((r) => r.id === id);
     if (!user) return;
-
-    await axios.patch(`${API_URL}/${id}`, { checked: !user.checked });
-    setRows((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, checked: !r.checked } : r))
-    );
+    try {
+      await axios.patch(`${API_URL}/${id}`, { checked: !user.checked });
+      setRows((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, checked: !r.checked } : r))
+      );
+    } catch (error) {
+      toast.error("Checkbox yangilanishida xatolik.", {
+        position: "top-right",
+      });
+    }
   };
 
-  // 🔹 Tahrirlash
   const handleEdit = (row) => {
     setForm({
       fullName: row.fullName,
       phoneNumber: row.phoneNumber,
-      time: row.time,
-      month: row.month,
-      year: row.year,
+      group: row.group,
       weekDays: row.weekDays || [],
     });
     setEditingId(row.id);
   };
 
-  // 🔹 O‘chirish
   const handleDelete = async (id) => {
-    await axios.delete(`${API_URL}/${id}`);
-    await getData();
+    const user = rows.find((r) => r.id === id);
+    if (!user) return;
+
+    try {
+      await axios.delete(`${API_URL}/${id}`);
+      toast.info(`O'quvchi o'chirildi: ${user.fullName}`, {
+        position: "top-right",
+        autoClose: 2000,
+      });
+      await getData();
+    } catch (error) {
+      toast.error("O'chirishda xatolik yuz berdi.", { position: "top-right" });
+    }
   };
 
-  // 🔹 Filter, qidiruv va “Tanlanganlar” funksiyasi
   const filteredRows = useMemo(() => {
     let filtered = rows;
-    if (filterMonth !== "Barchasi")
-      filtered = filtered.filter(
-        (r) => r.month.toLowerCase() === filterMonth.toLowerCase()
-      );
     if (search.trim()) {
       filtered = filtered.filter(
         (r) =>
           r.fullName.toLowerCase().includes(search.toLowerCase()) ||
-          r.phoneNumber.toLowerCase().includes(search.toLowerCase())
+          r.phoneNumber.toLowerCase().includes(search.toLowerCase()) ||
+          r.group.toLowerCase().includes(search.toLowerCase())
       );
     }
     if (showCheckedOnly) {
-      filtered = filtered.filter((r) => r.checked === true);
+      filtered = filtered.filter((r) => r.checked);
     }
     return filtered.map((r, i) => ({ ...r, order: i + 1 }));
-  }, [rows, search, filterMonth, showCheckedOnly]);
+  }, [rows, search, showCheckedOnly]);
 
-  // 🔹 Jadval ustunlari
   const columns = [
     {
       field: "checked",
@@ -173,15 +233,11 @@ function Lists({ darkMode, setDarkMode }) {
           onChange={() => toggleCheck(params.row.id)}
         />
       ),
-      sortable: false,
-      disableColumnMenu: true,
     },
     { field: "order", headerName: "№", width: 70 },
     { field: "fullName", headerName: "Ism Familiya", flex: 1 },
     { field: "phoneNumber", headerName: "Telefon raqam", flex: 1 },
-    { field: "time", headerName: "Vaqt", width: 120 },
-    { field: "month", headerName: "Oy", width: 120 },
-    { field: "year", headerName: "Yil", width: 100 },
+    { field: "group", headerName: "Guruh", width: 150 },
     {
       field: "weekDays",
       headerName: "Hafta kunlari",
@@ -205,7 +261,7 @@ function Lists({ darkMode, setDarkMode }) {
             <IconButton
               color="error"
               onClick={() => handleDelete(params.row.id)}
-              title="O‘chirish"
+              title="O'chirish"
             >
               <Delete />
             </IconButton>
@@ -214,83 +270,57 @@ function Lists({ darkMode, setDarkMode }) {
     },
   ];
 
-  // 🔹 Oylik ro‘yxat
-  const months = [
-    "Yanvar",
-    "Fevral",
-    "Mart",
-    "Aprel",
-    "May",
-    "Iyun",
-    "Iyul",
-    "Avgust",
-    "Sentabr",
-    "Oktabr",
-    "Noyabr",
-    "Dekabr",
-  ];
-
-  // 🔹 O‘zbekcha tarjimalar
   const localeText = {
     toolbarColumns: "Ustunlar",
     toolbarFilters: "Filtrlar",
-    toolbarDensity: "Ko‘rinish",
+    toolbarDensity: "Ko'rinish",
     toolbarExport: "Yuklab olish",
-    noRowsLabel: "Ma’lumot topilmadi",
-    noResultsOverlayLabel: "Mos keluvchi natija yo‘q",
+    noRowsLabel: "Ma'lumot topilmadi",
+    noResultsOverlayLabel: "Mos keluvchi natija yo'q",
   };
 
   return (
     <Paper
       elevation={0}
       sx={{
-        p: 3,
+        p: { xs: 0, md: 3 },
         width: "100%",
         minHeight: "100vh",
         display: "flex",
         flexDirection: "column",
         gap: 2,
-        bgcolor: darkMode ? "#121212" : "#fff",
-        color: darkMode ? "white" : "black",
-        borderRadius: 0,
+        bgcolor: theme.palette.background.default,
+        color: theme.palette.text.primary,
+        transition: "all 0.3s ease",
       }}
     >
-      {/* 🔹 Sarlavha */}
-      <Stack
-        direction="row"
-        justifyContent="space-between"
-        alignItems="center"
-        mb={1}
+      <ToastContainer />
+      <Typography
+        variant="h5"
+        fontWeight="bold"
+        sx={{ textAlign: "center", mb: 1 }}
       >
-        <Typography variant={isSmall ? "h6" : "h5"} fontWeight="bold">
-          O‘quvchilar ro‘yxati
-        </Typography>
+        O'quvchilar ro'yxati
+      </Typography>
 
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <LightMode />
-          <Switch
-            checked={darkMode}
-            onChange={() => setDarkMode(!darkMode)}
-            color="default"
-          />
-          <DarkMode />
-        </Stack>
-      </Stack>
-
-      {/* 🔹 Qidiruv va Tanlanganlar */}
+      {/* Qidirish va filtr */}
       <Stack
-        direction={isSmall ? "column" : "row"}
+        direction={{ xs: "column", sm: "row" }}
         spacing={2}
         alignItems="center"
+        sx={{ width: "100%" }}
       >
-        <Stack direction="row" alignItems="center" flex={1}>
-          <TextField
-            label="Ism yoki telefon orqali qidirish"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            fullWidth
-          />
-        </Stack>
+        <TextField
+          label="Ism, telefon yoki guruh orqali qidirish"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          fullWidth
+          variant="outlined"
+          sx={{
+            bgcolor: theme.palette.background.paper,
+            borderRadius: 1,
+          }}
+        />
         <FormControlLabel
           control={
             <Checkbox
@@ -302,15 +332,20 @@ function Lists({ darkMode, setDarkMode }) {
         />
       </Stack>
 
-      {/* 🔹 Forma */}
-      <Stack direction="column" spacing={2}>
-        <Stack direction={isSmall ? "column" : "row"} spacing={2}>
+      {/* Forma */}
+      <Stack direction="column" spacing={2} sx={{ width: "100%" }}>
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          spacing={2}
+          sx={{ width: "100%" }}
+        >
           <TextField
             label="Ism Familiya"
             name="fullName"
             value={form.fullName}
             onChange={handleChange}
             fullWidth
+            sx={{ bgcolor: theme.palette.background.paper }}
           />
           <TextField
             label="Telefon raqam"
@@ -318,51 +353,38 @@ function Lists({ darkMode, setDarkMode }) {
             value={form.phoneNumber}
             onChange={handleChange}
             fullWidth
+            sx={{ bgcolor: theme.palette.background.paper }}
           />
           <TextField
-            label="Vaqt (masalan: 14:00)"
-            name="time"
-            value={form.time}
+            label="Guruh"
+            name="group"
+            value={form.group}
             onChange={handleChange}
             fullWidth
-          />
-          <TextField
-            select
-            label="Oy tanlang"
-            name="month"
-            value={form.month}
-            onChange={handleChange}
-            fullWidth
-          >
-            {months.map((m) => (
-              <MenuItem key={m} value={m}>
-                {m}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            label="Yil"
-            name="year"
-            type="number"
-            value={form.year}
-            onChange={handleChange}
-            fullWidth
-            inputProps={{ min: 2000, max: 2100 }}
+            sx={{ bgcolor: theme.palette.background.paper }}
           />
         </Stack>
 
-        {/* 🔹 Hafta kunlari */}
         <FormControl fullWidth>
           <InputLabel>Hafta kunlarini tanlang</InputLabel>
           <Select
             multiple
             name="weekDays"
             value={form.weekDays}
-            onChange={handleChange}
+            onChange={(e) =>
+              setForm((prev) => ({
+                ...prev,
+                weekDays:
+                  typeof e.target.value === "string"
+                    ? e.target.value.split(",")
+                    : e.target.value,
+              }))
+            }
             label="Hafta kunlarini tanlang"
             renderValue={(selected) => selected.join(", ")}
+            sx={{ bgcolor: theme.palette.background.paper }}
           >
-            {days.map((day) => (
+            {(groupDays[form.group] || []).map((day) => (
               <MenuItem key={day} value={day}>
                 <Checkbox checked={form.weekDays.includes(day)} />
                 {day}
@@ -375,53 +397,44 @@ function Lists({ darkMode, setDarkMode }) {
           variant="contained"
           color={editingId ? "secondary" : "primary"}
           onClick={handleAdd}
-          sx={{ width: "200px", alignSelf: "flex-start" }}
+          sx={{
+            width: { xs: "100%", md: "200px" },
+            alignSelf: "flex-start",
+          }}
         >
-          {editingId ? "O‘zgartirish" : "Qo‘shish"}
+          {editingId ? "O'zgartirish" : "Qo'shish"}
         </Button>
       </Stack>
 
-      {/* 🔹 Jadval */}
-      <div style={{ flexGrow: 1, width: "100%" }}>
-        <DataGrid
-          rows={filteredRows}
-          columns={columns}
-          pageSize={pageSize}
-          onPageSizeChange={(newSize) => setPageSize(newSize)}
-          pageSizeOptions={[10, 50, 100]}
-          disableRowSelectionOnClick
-          localeText={localeText}
-          slots={{ toolbar: GridToolbar }}
-          sx={{
-            borderRadius: 2,
-            bgcolor: darkMode ? "#1e1e1e" : "white",
-            color: darkMode ? "#fff" : "#000",
-            "& .MuiDataGrid-columnHeaders": {
-              backgroundColor: darkMode ? "#333" : "#f5f5f5",
-              color: darkMode ? "#fff" : "#000",
-              fontWeight: "bold",
-            },
-          }}
-        />
+      {/* Jadval */}
+      <div style={{ flexGrow: 1, width: "100%", overflowX: "auto" }}>
+        <div style={{ minWidth: 700 }}>
+          <DataGrid
+            rows={filteredRows}
+            columns={columns}
+            pageSize={pageSize}
+            onPageSizeChange={(newSize) => setPageSize(newSize)}
+            pageSizeOptions={[10, 50, 100]}
+            disableRowSelectionOnClick
+            localeText={localeText}
+            slots={{ toolbar: GridToolbar }}
+            sx={{
+              borderRadius: 2,
+              bgcolor: theme.palette.background.paper,
+              color: theme.palette.text.primary,
+              "& .MuiDataGrid-columnHeaders": {
+                backgroundColor: darkMode ? "#2c2c2c" : "#f5f5f5",
+                fontWeight: "bold",
+              },
+              "& .MuiTablePagination-root": {
+                color: theme.palette.text.primary,
+              },
+            }}
+          />
+        </div>
       </div>
     </Paper>
   );
 }
 
-export default function App() {
-  const [darkMode, setDarkMode] = useState(false);
-
-  const theme = useMemo(
-    () =>
-      createTheme({
-        palette: { mode: darkMode ? "dark" : "light" },
-      }),
-    [darkMode]
-  );
-
-  return (
-    <ThemeProvider theme={theme}>
-      <Lists darkMode={darkMode} setDarkMode={setDarkMode} />
-    </ThemeProvider>
-  );
-}
+export default Lists;
