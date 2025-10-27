@@ -384,7 +384,7 @@ function Lists({ darkMode }) {
             renderValue={(selected) => selected.join(", ")}
             sx={{ bgcolor: theme.palette.background.paper }}
           >
-            {(groupDays[form.group] || []).map((day) => (
+            {days.map((day) => (
               <MenuItem key={day} value={day}>
                 <Checkbox checked={form.weekDays.includes(day)} />
                 {day}
