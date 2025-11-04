@@ -10,52 +10,104 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import { Save } from "@mui/icons-material";
-import axios from "axios";
+import { supabase } from "../../supabaseClient";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
-import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
-
-const API_URL = "https://server-supabase-3k3k.onrender.com/users";
-const HISTORY_URL =
-  "https://server-supabase-3k3k.onrender.com/attendanceHistory";
 
 export default function Davomat({ darkMode }) {
   const theme = useTheme();
+  const [user, setUser] = useState(null);
+  const [students, setStudents] = useState([]);
   const [rows, setRows] = useState([]);
   const [filter, setFilter] = useState({ group: "", day: "" });
   const [disabledStatus, setDisabledStatus] = useState({});
 
+  // 1️⃣ Foydalanuvchini olish
   useEffect(() => {
-    axios.get(API_URL).then((res) => setRows(res.data));
+    const fetchUser = async () => {
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
+      if (error || !user) {
+        toast.error("Foydalanuvchi topilmadi!");
+        return;
+      }
+      setUser(user);
+    };
+    fetchUser();
   }, []);
 
-  const groups = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.group).filter(Boolean))),
-    [rows]
-  );
+  // 2️⃣ O‘quvchilarni olish (faqat ushbu ustozga tegishli)
+  useEffect(() => {
+    const fetchStudents = async () => {
+      if (!user || !user.id) return;
+      try {
+        const { data, error } = await supabase
+          .from("lists")
+          .select('id, fullName, "group", weekDays, user_id')
+          .eq("user_id", user.id);
+        if (error) throw error;
+        setStudents(data || []);
+      } catch (error) {
+        console.error("O‘quvchilarni olish xatolik:", error);
+        toast.error("O‘quvchilarni olishda xatolik!");
+      }
+    };
+    fetchStudents();
+  }, [user]);
 
-  const filteredRows = useMemo(() => {
-    if (!filter.group || !filter.day) return [];
-    return rows
-      .filter(
-        (r) =>
-          r.group === filter.group &&
-          Array.isArray(r.weekDays) &&
-          r.weekDays.includes(filter.day)
-      )
-      .map((r, i) => ({ ...r, order: i + 1 }));
-  }, [rows, filter]);
+  // 3️⃣ Guruhlarni chiqarish
+  const groups = useMemo(() => {
+    return Array.from(
+      new Set(students.map((s) => s.group?.trim()).filter(Boolean))
+    );
+  }, [students]);
 
+  // 4️⃣ Filtr bo‘yicha o‘quvchilarni ajratish
+  useEffect(() => {
+    if (!filter.group || !filter.day) {
+      setRows([]);
+      return;
+    }
+
+    const filtered = students
+      .filter((s) => {
+        let weekDays = [];
+        try {
+          weekDays = Array.isArray(s.weekDays)
+            ? s.weekDays
+            : JSON.parse(s.weekDays || "[]");
+        } catch (e) {
+          console.error("weekDays parse error:", e);
+        }
+        return s.group === filter.group && weekDays.includes(filter.day);
+      })
+      .map((s, index) => ({
+        ...s,
+        order: index + 1,
+        status: "belgilanmagan",
+      }));
+
+    setRows(filtered);
+  }, [filter, students]);
+
+  // 5️⃣ Davomatni belgilash
   const handleAttendance = (id, status) => {
     setDisabledStatus((prev) => ({ ...prev, [id]: status }));
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
   };
 
+  // 6️⃣ Saqlash Supabase
   const handleSaveAttendance = async () => {
-    if (filteredRows.length === 0) {
-      toast.warning("Avval guruhni tanlang va davomat belgilang.");
+    if (!filter.group || !filter.day || rows.length === 0) {
+      toast.warning("Avval guruh va hafta kunini tanlang!");
+      return;
+    }
+    if (!user) {
+      toast.error("Foydalanuvchi aniqlanmadi!");
       return;
     }
 
@@ -64,94 +116,62 @@ export default function Davomat({ darkMode }) {
       date.getMonth() + 1
     ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
-    const students = filteredRows.map((r, index) => ({
-      id: index + 1,
-      fullName: r.fullName,
-      group: r.group,
-      status: r.status || "belgilanmagan",
-    }));
-
     try {
-      const { data: history } = await axios.get(HISTORY_URL);
-      const newId =
-        history.length > 0 ? Math.max(...history.map((h) => h.id)) + 1 : 1;
-
-      const alreadyExists = history.some(
-        (item) =>
-          item.date === formattedDate &&
-          item.group === filter.group &&
-          item.day === filter.day
-      );
-
-      if (alreadyExists) {
-        toast.warning("Bu guruhning bugungi davomati allaqachon olindi!");
-        return;
-      }
-
-      const record = {
-        id: String(newId),
+      const insertData = rows.map((r) => ({
         date: formattedDate,
-        group: filter.group,
-        day: filter.day,
-        students,
-      };
+        user_id: user.id,
+        student_name: r.fullName,
+        status: r.status || "belgilanmagan",
+      }));
 
-      await axios.post(HISTORY_URL, record);
-      setDisabledStatus({});
+      const { error } = await supabase.from("attendance").insert(insertData);
+
+      if (error) throw error;
+
       toast.success("Davomat muvaffaqiyatli saqlandi!");
-    } catch (error) {
-      console.error("Xatolik:", error);
+      setDisabledStatus({});
+    } catch (err) {
+      console.error("Davomatni saqlashda xatolik:", err);
       toast.error("Xatolik: Davomat saqlanmadi!");
     }
   };
 
+  // 7️⃣ Jadval ustunlari
   const columns = [
-    { field: "order", headerName: "№", width: 80 },
+    { field: "order", headerName: "№", width: 70 },
     { field: "fullName", headerName: "Ism Familiya", flex: 1 },
     { field: "group", headerName: "Guruh", flex: 1 },
     {
       field: "status",
       headerName: "Davomat",
-      flex: 1.6,
+      flex: 1.5,
       renderCell: (params) => (
-        <Stack
-          direction="row"
-          spacing={1}
-          sx={{
-            width: "100%",
-            "& .MuiButton-root": {
-              fontSize: "12px",
-              minWidth: "100px",
-              flex: 1,
-              textTransform: "none",
-              whiteSpace: "nowrap",
-              padding: "6px 8px",
-            },
-          }}
-        >
+        <Stack direction="row" spacing={1} sx={{ width: "100%" }}>
           <Button
             variant="contained"
             color="success"
+            size="small"
             disabled={disabledStatus[params.row.id] === "keldi"}
             onClick={() => handleAttendance(params.row.id, "keldi")}
           >
-            <CheckIcon sx={{ mr: 0.5 }} /> Keldi
+            <CheckIcon fontSize="small" /> Keldi
           </Button>
           <Button
             variant="contained"
             color="error"
+            size="small"
             disabled={disabledStatus[params.row.id] === "kelmadi"}
             onClick={() => handleAttendance(params.row.id, "kelmadi")}
           >
-            <CloseIcon sx={{ mr: 0.5 }} /> Kelmadi
+            <CloseIcon fontSize="small" /> Kelmadi
           </Button>
           <Button
             variant="outlined"
-            color="warning"
-            disabled={disabledStatus[params.row.id] === ""}
-            onClick={() => handleAttendance(params.row.id, "")}
+            size="small"
+            disabled={disabledStatus[params.row.id] === "belgilanmagan"}
+            onClick={() => handleAttendance(params.row.id, "belgilanmagan")}
           >
-            <RemoveCircleOutlineIcon sx={{ mr: 0.5 }} /> Tanlanmagan
+            Belgilanmagan
           </Button>
         </Stack>
       ),
@@ -169,35 +189,19 @@ export default function Davomat({ darkMode }) {
   ];
 
   return (
-    <Paper
-      sx={{
-        minHeight: "100vh",
-        bgcolor: theme.palette.background.default,
-        color: theme.palette.text.primary,
-        transition: "all 0.3s ease",
-      }}
-      elevation={0}
-    >
+    <Paper sx={{ p: 3, bgcolor: theme.palette.background.default }}>
       <ToastContainer
         position="top-right"
         autoClose={2500}
         theme={darkMode ? "dark" : "light"}
       />
 
-      <Typography variant="h5" fontWeight="bold" mb={3}>
+      <Typography variant="h5" fontWeight="bold" mb={2}>
         Guruh Davomat Tizimi
       </Typography>
 
       {/* Filtrlar */}
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        spacing={2}
-        mb={2}
-        flexWrap="wrap"
-        sx={{
-          "& .MuiTextField-root": { flex: 1, minWidth: "180px" },
-        }}
-      >
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} mb={2}>
         <TextField
           select
           label="Guruh"
@@ -205,11 +209,15 @@ export default function Davomat({ darkMode }) {
           value={filter.group}
           onChange={(e) => setFilter({ ...filter, group: e.target.value })}
         >
-          {groups.map((g) => (
-            <MenuItem key={g} value={g}>
-              {g}
-            </MenuItem>
-          ))}
+          {groups.length > 0 ? (
+            groups.map((g) => (
+              <MenuItem key={g} value={g}>
+                {g}
+              </MenuItem>
+            ))
+          ) : (
+            <MenuItem disabled>Guruhlar mavjud emas</MenuItem>
+          )}
         </TextField>
 
         <TextField
@@ -230,44 +238,25 @@ export default function Davomat({ darkMode }) {
           variant="contained"
           color="success"
           startIcon={<Save />}
-          sx={{ flex: 1, minWidth: "180px" }}
           onClick={handleSaveAttendance}
         >
           Saqlash
         </Button>
       </Stack>
 
-      {/* Jadval responsive */}
-      {filteredRows.length > 0 ? (
-        <div
-          style={{
-            width: "100%",
-            overflowX: "auto",
-            borderRadius: 8,
-            backgroundColor: theme.palette.background.paper,
-          }}
-        >
-          <div style={{ minWidth: 900, height: 500 }}>
-            <DataGrid
-              rows={filteredRows}
-              columns={columns}
-              pageSize={10}
-              disableRowSelectionOnClick
-              sx={{
-                color: theme.palette.text.primary,
-                border: 0,
-                "& .MuiDataGrid-columnHeaders": {
-                  backgroundColor: darkMode ? "#333" : "#f5f5f5",
-                },
-                "& .MuiDataGrid-cell": {
-                  borderColor: darkMode ? "#444" : "#ddd",
-                },
-              }}
-            />
-          </div>
+      {/* Jadval */}
+      {rows.length > 0 ? (
+        <div style={{ width: "100%", height: 500 }}>
+          <DataGrid
+            rows={rows}
+            columns={columns}
+            pageSize={8}
+            getRowId={(row) => row.id}
+            disableRowSelectionOnClick
+          />
         </div>
       ) : (
-        <Typography sx={{ mt: 3, textAlign: "center" }}>
+        <Typography align="center" mt={3}>
           Iltimos, <b>guruh</b> va <b>hafta kunini</b> tanlang.
         </Typography>
       )}
