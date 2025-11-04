@@ -23,7 +23,7 @@ export default function Davomat({ darkMode }) {
   const [rows, setRows] = useState([]);
   const [filter, setFilter] = useState({ group: "", day: "" });
   const [disabledStatus, setDisabledStatus] = useState({});
-  const [savedHistory, setSavedHistory] = useState([]);
+  const [blockedGroups, setBlockedGroups] = useState({});
 
   // 1️⃣ Foydalanuvchini olish
   useEffect(() => {
@@ -91,6 +91,9 @@ export default function Davomat({ darkMode }) {
 
   // 5️⃣ Davomatni belgilash
   const handleAttendance = (id, status) => {
+    const todayStr = new Date().toISOString().split("T")[0];
+    if (isBlocked(filter.group, todayStr)) return; // bloklangan bo'lsa, hech narsa qilmasin
+
     setDisabledStatus((prev) => ({ ...prev, [id]: status }));
     setRows((prev) =>
       prev.map((r) =>
@@ -101,19 +104,52 @@ export default function Davomat({ darkMode }) {
     );
   };
 
-  // 6️⃣ Avval saqlangan davomatlarni olish
+  // 6️⃣ Avval saqlangan davomatlarni olish va bloklash + auto update
   useEffect(() => {
     if (!user) return;
+
     const fetchHistory = async () => {
       const { data, error } = await supabase
         .from("history")
         .select("*")
-        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
-      if (!error && data) setSavedHistory(data);
+
+      if (error) return;
+
+      const newBlocked = {};
+      const now = new Date();
+
+      data.forEach((h) => {
+        const createdAt = new Date(h.created_at);
+        const diffHrs = (now - createdAt) / (1000 * 60 * 60);
+        if (diffHrs < 20) {
+          const key = `${h.group}-${h.date}`;
+          newBlocked[key] = createdAt.getTime() + 20 * 60 * 60 * 1000;
+        }
+      });
+
+      setBlockedGroups(newBlocked);
     };
+
     fetchHistory();
+
+    const interval = setInterval(fetchHistory, 60 * 1000); // har 1 daqiqa tekshirish
+    return () => clearInterval(interval);
   }, [user]);
+
+  const isBlocked = (group, date) => {
+    const key = `${group}-${date}`;
+    return blockedGroups[key] && blockedGroups[key] > new Date().getTime();
+  };
+
+  const getRemainingTime = (group, date) => {
+    const key = `${group}-${date}`;
+    if (!blockedGroups[key]) return null;
+    const diffMs = blockedGroups[key] - new Date().getTime();
+    const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMin = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    return { hours: diffHrs, minutes: diffMin };
+  };
 
   // 7️⃣ Saqlash Supabase history jadvaliga
   const handleSaveAttendance = async () => {
@@ -121,26 +157,13 @@ export default function Davomat({ darkMode }) {
       return toast.warning("Avval guruh va hafta kunini tanlang!");
     if (!user) return toast.error("Foydalanuvchi aniqlanmadi!");
 
-    const today = new Date();
-    const todayStr = today.toISOString().split("T")[0]; // YYYY-MM-DD
+    const todayStr = new Date().toISOString().split("T")[0];
 
-    // Shu guruh va bugungi kun uchun avval saqlanganini tekshirish
-    const existing = savedHistory.find(
-      (h) => h.group === filter.group && h.date === todayStr
-    );
-
-    if (existing) {
-      const createdAt = new Date(existing.created_at);
-      const now = new Date();
-      const diffMs = now - createdAt; // millisekundlarda
-      const diffHrs = diffMs / (1000 * 60 * 60); // soatga o'tkazish
-
-      if (diffHrs < 20) {
-        const remaining = Math.ceil(20 - diffHrs);
-        return toast.warning(
-          `Avval davomat saqlangan! ${remaining} soat ichida qayta saqlash mumkin emas.`
-        );
-      }
+    if (isBlocked(filter.group, todayStr)) {
+      const remaining = getRemainingTime(filter.group, todayStr);
+      return toast.warning(
+        `Avval davomat saqlangan! Qolgan vaqt: ${remaining.hours} soat ${remaining.minutes} daqiqa.`
+      );
     }
 
     try {
@@ -161,7 +184,12 @@ export default function Davomat({ darkMode }) {
 
       toast.success("Davomat muvaffaqiyatli saqlandi!");
       setDisabledStatus({});
-      setSavedHistory((prev) => [data[0], ...prev]);
+
+      // yangi tarixni qo'shish va blokni yangilash
+      const newBlocked = { ...blockedGroups };
+      newBlocked[`${filter.group}-${todayStr}`] =
+        new Date().getTime() + 20 * 60 * 60 * 1000;
+      setBlockedGroups(newBlocked);
     } catch (err) {
       console.error("Davomatni saqlash xatolik:", err);
       toast.error("Xatolik: Davomat saqlanmadi!");
@@ -176,36 +204,43 @@ export default function Davomat({ darkMode }) {
       field: "status",
       headerName: "Davomat",
       flex: 1.5,
-      renderCell: (params) => (
-        <Stack direction="row" spacing={1} sx={{ width: "100%", mt: 1 }}>
-          <Button
-            variant="contained"
-            color="success"
-            size="small"
-            disabled={disabledStatus[params.row.id] === "keldi"}
-            onClick={() => handleAttendance(params.row.id, "keldi")}
-          >
-            <CheckIcon fontSize="small" /> Keldi
-          </Button>
-          <Button
-            variant="contained"
-            color="error"
-            size="small"
-            disabled={disabledStatus[params.row.id] === "kelmadi"}
-            onClick={() => handleAttendance(params.row.id, "kelmadi")}
-          >
-            <CloseIcon fontSize="small" /> Kelmadi
-          </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            disabled={disabledStatus[params.row.id] === "belgilanmagan"}
-            onClick={() => handleAttendance(params.row.id, "belgilanmagan")}
-          >
-            Belgilanmagan
-          </Button>
-        </Stack>
-      ),
+      renderCell: (params) => {
+        const todayStr = new Date().toISOString().split("T")[0];
+        const blocked = isBlocked(filter.group, todayStr);
+
+        return (
+          <Stack direction="row" spacing={1} sx={{ width: "100%", mt: 1 }}>
+            <Button
+              variant="contained"
+              color="success"
+              size="small"
+              disabled={disabledStatus[params.row.id] === "keldi" || blocked}
+              onClick={() => handleAttendance(params.row.id, "keldi")}
+            >
+              <CheckIcon fontSize="small" /> Keldi
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              size="small"
+              disabled={disabledStatus[params.row.id] === "kelmadi" || blocked}
+              onClick={() => handleAttendance(params.row.id, "kelmadi")}
+            >
+              <CloseIcon fontSize="small" /> Kelmadi
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              disabled={
+                disabledStatus[params.row.id] === "belgilanmagan" || blocked
+              }
+              onClick={() => handleAttendance(params.row.id, "belgilanmagan")}
+            >
+              Belgilanmagan
+            </Button>
+          </Stack>
+        );
+      },
     },
   ];
 
@@ -240,11 +275,14 @@ export default function Davomat({ darkMode }) {
           onChange={(e) => setFilter({ ...filter, group: e.target.value })}
         >
           {groups.length > 0 ? (
-            groups.map((g) => (
-              <MenuItem key={g} value={g}>
-                {g}
-              </MenuItem>
-            ))
+            groups.map((g) => {
+              const todayStr = new Date().toISOString().split("T")[0];
+              return (
+                <MenuItem key={g} value={g} disabled={isBlocked(g, todayStr)}>
+                  {g}
+                </MenuItem>
+              );
+            })
           ) : (
             <MenuItem disabled>Guruhlar mavjud emas</MenuItem>
           )}
