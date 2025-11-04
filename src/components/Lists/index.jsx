@@ -287,12 +287,11 @@ function Lists() {
   ];
 
   return (
-    <Paper sx={{ p: 3, minHeight: "100vh" }}>
+    <Paper sx={{ p: 2, minHeight: "100vh" }}>
       <ToastContainer />
       <Typography variant="h5" textAlign="start" mb={2}>
         O'quvchilar ro'yxati
       </Typography>
-
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2} mb={2}>
         <TextField
           label="Qidirish"
@@ -310,7 +309,6 @@ function Lists() {
           label="Tanlanganlar"
         />
       </Stack>
-
       <Stack spacing={2} mb={3}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
           <TextField
@@ -366,11 +364,11 @@ function Lists() {
           variant="contained"
           color={editingId ? "secondary" : "primary"}
           onClick={handleAdd}
+          sx={{ width: "100px" }}
         >
           {editingId ? "O'zgartirish" : "Qo'shish"}
         </Button>
       </Stack>
-
       <DataGrid
         rows={filteredRows}
         columns={columns}
@@ -379,7 +377,7 @@ function Lists() {
         pageSizeOptions={[10, 20, 50]}
         disableRowSelectionOnClick
         slots={{ toolbar: GridToolbar }}
-      />
+      />{" "}
     </Paper>
   );
 }

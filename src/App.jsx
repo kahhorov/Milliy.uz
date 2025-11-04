@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -12,17 +12,18 @@ import Register from "./components/Register";
 import Lists from "./components/Lists";
 import Davomat from "./components/Davomat";
 import DateStatus from "./components/DateStatus";
-import Profile from "./components/Profile"; // <-- Profile komponentini import qildik
+import Profile from "./components/Profile";
 import Navbar from "./components/Navbar";
+import { ThemeProvider, createTheme, CssBaseline } from "@mui/material";
 
-// 🔐 Maxfiy sahifalarni himoya qilish
+// Private Route komponenti
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth();
   if (loading) return <p>Yuklanmoqda...</p>;
   return user ? children : <Navigate to="/login" />;
 };
 
-// 🔝 Navbarni faqat login bo‘lganda ko‘rsatadigan o‘rama komponent
+// Layout komponenti (navbarni yashirish va ko‘rsatish)
 const Layout = ({ children, darkMode, setDarkMode }) => {
   const location = useLocation();
   const hideNavbar =
@@ -37,66 +38,95 @@ const Layout = ({ children, darkMode, setDarkMode }) => {
 };
 
 const App = () => {
-  const [darkMode, setDarkMode] = useState(false);
+  // 1️⃣ Initial darkMode state localStorage dan o'qiladi
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      const savedMode = localStorage.getItem("darkMode");
+      return savedMode === "true" ? true : false;
+    } catch (err) {
+      console.error("Dark mode ni localStorage dan yuklashda xatolik:", err);
+      return false; // default light mode
+    }
+  });
 
-  // LocalStorage dan darkMode yuklash
+  // 2️⃣ Dark mode o‘zgarganda localStorage ga saqlash
   useEffect(() => {
-    const savedMode = JSON.parse(localStorage.getItem("darkMode"));
-    if (savedMode !== null) setDarkMode(savedMode);
-  }, []);
+    try {
+      localStorage.setItem("darkMode", darkMode.toString());
+    } catch (err) {
+      console.error("Dark mode ni localStorage ga saqlashda xatolik:", err);
+    }
+  }, [darkMode]);
+
+  // 3️⃣ MUI theme yaratish
+  const theme = useMemo(
+    () =>
+      createTheme({
+        palette: {
+          mode: darkMode ? "dark" : "light",
+          primary: { main: "#1976d2" },
+          secondary: { main: "#dc004e" },
+        },
+      }),
+    [darkMode]
+  );
 
   return (
     <AuthProvider>
-      <Router>
-        <Layout darkMode={darkMode} setDarkMode={setDarkMode}>
-          <Routes>
-            <Route path="/" element={<Navigate to="/login" />} />
-            <Route
-              path="/login"
-              element={<Login darkMode={darkMode} setDarkMode={setDarkMode} />}
-            />
-            <Route
-              path="/register"
-              element={
-                <Register darkMode={darkMode} setDarkMode={setDarkMode} />
-              }
-            />
-
-            <Route
-              path="/lists"
-              element={
-                <PrivateRoute>
-                  <Lists darkMode={darkMode} setDarkMode={setDarkMode} />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/davomat"
-              element={
-                <PrivateRoute>
-                  <Davomat darkMode={darkMode} setDarkMode={setDarkMode} />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/datestatus"
-              element={
-                <PrivateRoute>
-                  <DateStatus darkMode={darkMode} setDarkMode={setDarkMode} />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/profile"
-              element={
-                <PrivateRoute>
-                  <Profile darkMode={darkMode} setDarkMode={setDarkMode} />
-                </PrivateRoute>
-              }
-            />
-          </Routes>
-        </Layout>
-      </Router>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Router>
+          <Layout darkMode={darkMode} setDarkMode={setDarkMode}>
+            <Routes>
+              <Route path="/" element={<Navigate to="/login" />} />
+              <Route
+                path="/login"
+                element={
+                  <Login darkMode={darkMode} setDarkMode={setDarkMode} />
+                }
+              />
+              <Route
+                path="/register"
+                element={
+                  <Register darkMode={darkMode} setDarkMode={setDarkMode} />
+                }
+              />
+              <Route
+                path="/lists"
+                element={
+                  <PrivateRoute>
+                    <Lists darkMode={darkMode} setDarkMode={setDarkMode} />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/davomat"
+                element={
+                  <PrivateRoute>
+                    <Davomat darkMode={darkMode} setDarkMode={setDarkMode} />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/datestatus"
+                element={
+                  <PrivateRoute>
+                    <DateStatus darkMode={darkMode} setDarkMode={setDarkMode} />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <PrivateRoute>
+                    <Profile darkMode={darkMode} setDarkMode={setDarkMode} />
+                  </PrivateRoute>
+                }
+              />
+            </Routes>
+          </Layout>
+        </Router>
+      </ThemeProvider>
     </AuthProvider>
   );
 };

@@ -10,11 +10,11 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import { Save } from "@mui/icons-material";
+import CheckIcon from "@mui/icons-material/Check";
+import CloseIcon from "@mui/icons-material/Close";
 import { supabase } from "../../supabaseClient";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import CheckIcon from "@mui/icons-material/Check";
-import CloseIcon from "@mui/icons-material/Close";
 
 export default function Davomat({ darkMode }) {
   const theme = useTheme();
@@ -40,7 +40,7 @@ export default function Davomat({ darkMode }) {
     fetchUser();
   }, []);
 
-  // 2️⃣ O‘quvchilarni olish (faqat ushbu ustozga tegishli)
+  // 2️⃣ O‘quvchilarni olish
   useEffect(() => {
     const fetchStudents = async () => {
       if (!user || !user.id) return;
@@ -51,8 +51,8 @@ export default function Davomat({ darkMode }) {
           .eq("user_id", user.id);
         if (error) throw error;
         setStudents(data || []);
-      } catch (error) {
-        console.error("O‘quvchilarni olish xatolik:", error);
+      } catch (err) {
+        console.error("O‘quvchilarni olish xatolik:", err);
         toast.error("O‘quvchilarni olishda xatolik!");
       }
     };
@@ -100,7 +100,7 @@ export default function Davomat({ darkMode }) {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
   };
 
-  // 6️⃣ Saqlash Supabase
+  // 6️⃣ Saqlash Supabase history jadvaliga
   const handleSaveAttendance = async () => {
     if (!filter.group || !filter.day || rows.length === 0) {
       toast.warning("Avval guruh va hafta kunini tanlang!");
@@ -117,14 +117,23 @@ export default function Davomat({ darkMode }) {
     ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
     try {
-      const insertData = rows.map((r) => ({
-        date: formattedDate,
+      // History uchun ma'lumotni tayyorlash
+      const historyData = {
         user_id: user.id,
-        student_name: r.fullName,
-        status: r.status || "belgilanmagan",
-      }));
+        date: formattedDate,
+        group: filter.group,
+        day: filter.day,
+        students: JSON.stringify(
+          rows.map((r) => ({
+            fullName: r.fullName,
+            status: r.status || "belgilanmagan",
+            group: r.group || "",
+          }))
+        ),
+      };
 
-      const { error } = await supabase.from("attendance").insert(insertData);
+      // Supabase ga insert qilish
+      const { error } = await supabase.from("history").insert([historyData]);
 
       if (error) throw error;
 
@@ -146,7 +155,7 @@ export default function Davomat({ darkMode }) {
       headerName: "Davomat",
       flex: 1.5,
       renderCell: (params) => (
-        <Stack direction="row" spacing={1} sx={{ width: "100%" }}>
+        <Stack direction="row" spacing={1} sx={{ width: "100%", mt: 1 }}>
           <Button
             variant="contained"
             color="success"
@@ -189,7 +198,7 @@ export default function Davomat({ darkMode }) {
   ];
 
   return (
-    <Paper sx={{ p: 3, bgcolor: theme.palette.background.default }}>
+    <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
       <ToastContainer
         position="top-right"
         autoClose={2500}
@@ -239,6 +248,7 @@ export default function Davomat({ darkMode }) {
           color="success"
           startIcon={<Save />}
           onClick={handleSaveAttendance}
+          sx={{ width: "100%" }}
         >
           Saqlash
         </Button>
@@ -246,14 +256,16 @@ export default function Davomat({ darkMode }) {
 
       {/* Jadval */}
       {rows.length > 0 ? (
-        <div style={{ width: "100%", height: 500 }}>
-          <DataGrid
-            rows={rows}
-            columns={columns}
-            pageSize={8}
-            getRowId={(row) => row.id}
-            disableRowSelectionOnClick
-          />
+        <div style={{ width: "100%", overflowX: "auto" }}>
+          <div style={{ minWidth: 820, height: 500 }}>
+            <DataGrid
+              rows={rows}
+              columns={columns}
+              pageSize={8}
+              getRowId={(row) => row.id}
+              disableRowSelectionOnClick
+            />
+          </div>
         </div>
       ) : (
         <Typography align="center" mt={3}>
