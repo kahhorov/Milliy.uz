@@ -23,6 +23,7 @@ export default function Davomat({ darkMode }) {
   const [rows, setRows] = useState([]);
   const [filter, setFilter] = useState({ group: "", day: "" });
   const [disabledStatus, setDisabledStatus] = useState({});
+  const [savedHistory, setSavedHistory] = useState([]);
 
   // 1️⃣ Foydalanuvchini olish
   useEffect(() => {
@@ -31,10 +32,7 @@ export default function Davomat({ darkMode }) {
         data: { user },
         error,
       } = await supabase.auth.getUser();
-      if (error || !user) {
-        toast.error("Foydalanuvchi topilmadi!");
-        return;
-      }
+      if (error || !user) return toast.error("Foydalanuvchi topilmadi!");
       setUser(user);
     };
     fetchUser();
@@ -42,19 +40,14 @@ export default function Davomat({ darkMode }) {
 
   // 2️⃣ O‘quvchilarni olish
   useEffect(() => {
+    if (!user) return;
     const fetchStudents = async () => {
-      if (!user || !user.id) return;
-      try {
-        const { data, error } = await supabase
-          .from("lists")
-          .select('id, fullName, "group", weekDays, user_id')
-          .eq("user_id", user.id);
-        if (error) throw error;
-        setStudents(data || []);
-      } catch (err) {
-        console.error("O‘quvchilarni olish xatolik:", err);
-        toast.error("O‘quvchilarni olishda xatolik!");
-      }
+      const { data, error } = await supabase
+        .from("lists")
+        .select('id, fullName, "group", weekDays, user_id')
+        .eq("user_id", user.id);
+      if (error) return toast.error("O‘quvchilarni olishda xatolik!");
+      setStudents(data || []);
     };
     fetchStudents();
   }, [user]);
@@ -89,6 +82,8 @@ export default function Davomat({ darkMode }) {
         ...s,
         order: index + 1,
         status: "belgilanmagan",
+        late: "",
+        id: s.id || crypto.randomUUID(),
       }));
 
     setRows(filtered);
@@ -97,55 +92,82 @@ export default function Davomat({ darkMode }) {
   // 5️⃣ Davomatni belgilash
   const handleAttendance = (id, status) => {
     setDisabledStatus((prev) => ({ ...prev, [id]: status }));
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
+    setRows((prev) =>
+      prev.map((r) =>
+        r.id === id
+          ? { ...r, status, late: status === "kechikdi" ? r.late || "" : "" }
+          : r
+      )
+    );
   };
 
-  // 6️⃣ Saqlash Supabase history jadvaliga
-  const handleSaveAttendance = async () => {
-    if (!filter.group || !filter.day || rows.length === 0) {
-      toast.warning("Avval guruh va hafta kunini tanlang!");
-      return;
-    }
-    if (!user) {
-      toast.error("Foydalanuvchi aniqlanmadi!");
-      return;
-    }
+  // 6️⃣ Avval saqlangan davomatlarni olish
+  useEffect(() => {
+    if (!user) return;
+    const fetchHistory = async () => {
+      const { data, error } = await supabase
+        .from("history")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      if (!error && data) setSavedHistory(data);
+    };
+    fetchHistory();
+  }, [user]);
 
-    const date = new Date();
-    const formattedDate = `${date.getFullYear()}-${String(
-      date.getMonth() + 1
-    ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  // 7️⃣ Saqlash Supabase history jadvaliga
+  const handleSaveAttendance = async () => {
+    if (!filter.group || !filter.day || rows.length === 0)
+      return toast.warning("Avval guruh va hafta kunini tanlang!");
+    if (!user) return toast.error("Foydalanuvchi aniqlanmadi!");
+
+    const today = new Date();
+    const todayStr = today.toISOString().split("T")[0]; // YYYY-MM-DD
+
+    // Shu guruh va bugungi kun uchun avval saqlanganini tekshirish
+    const existing = savedHistory.find(
+      (h) => h.group === filter.group && h.date === todayStr
+    );
+
+    if (existing) {
+      const createdAt = new Date(existing.created_at);
+      const now = new Date();
+      const diffMs = now - createdAt; // millisekundlarda
+      const diffHrs = diffMs / (1000 * 60 * 60); // soatga o'tkazish
+
+      if (diffHrs < 20) {
+        const remaining = Math.ceil(20 - diffHrs);
+        return toast.warning(
+          `Avval davomat saqlangan! ${remaining} soat ichida qayta saqlash mumkin emas.`
+        );
+      }
+    }
 
     try {
-      // History uchun ma'lumotni tayyorlash
       const historyData = {
         user_id: user.id,
-        date: formattedDate,
         group: filter.group,
         day: filter.day,
-        students: JSON.stringify(
-          rows.map((r) => ({
-            fullName: r.fullName,
-            status: r.status || "belgilanmagan",
-            group: r.group || "",
-          }))
-        ),
+        date: todayStr,
+        students: JSON.stringify(rows),
       };
 
-      // Supabase ga insert qilish
-      const { error } = await supabase.from("history").insert([historyData]);
+      const { data, error } = await supabase
+        .from("history")
+        .insert([historyData])
+        .select();
 
       if (error) throw error;
 
       toast.success("Davomat muvaffaqiyatli saqlandi!");
       setDisabledStatus({});
+      setSavedHistory((prev) => [data[0], ...prev]);
     } catch (err) {
-      console.error("Davomatni saqlashda xatolik:", err);
+      console.error("Davomatni saqlash xatolik:", err);
       toast.error("Xatolik: Davomat saqlanmadi!");
     }
   };
 
-  // 7️⃣ Jadval ustunlari
   const columns = [
     { field: "order", headerName: "№", width: 70 },
     { field: "fullName", headerName: "Ism Familiya", flex: 1 },
@@ -209,7 +231,6 @@ export default function Davomat({ darkMode }) {
         Guruh Davomat Tizimi
       </Typography>
 
-      {/* Filtrlar */}
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2} mb={2}>
         <TextField
           select
@@ -254,10 +275,9 @@ export default function Davomat({ darkMode }) {
         </Button>
       </Stack>
 
-      {/* Jadval */}
       {rows.length > 0 ? (
         <div style={{ width: "100%", overflowX: "auto" }}>
-          <div style={{ minWidth: 820, height: 500 }}>
+          <div style={{ minWidth: 970, height: 500 }}>
             <DataGrid
               rows={rows}
               columns={columns}

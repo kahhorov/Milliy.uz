@@ -17,6 +17,8 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Chip,
+  CircularProgress,
   useTheme,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -31,15 +33,33 @@ export default function DateStatus({ darkMode }) {
   const [parentRecord, setParentRecord] = useState(null);
   const [openDelete, setOpenDelete] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
+  const [newRecordId, setNewRecordId] = useState(null);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true); // ⬅ progress uchun state
   const theme = useTheme();
 
-  // Fetch history from Supabase
+  // 🔑 Foydalanuvchini olish
+  useEffect(() => {
+    const getUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      setUser(user);
+    };
+    getUser();
+  }, []);
+
+  // 🟢 History-ni olish
   const fetchHistory = async () => {
+    if (!user) return;
+    setLoading(true); // ⬅ fetch boshlanganda progress
     try {
       const { data, error } = await supabase
         .from("history")
         .select("*")
+        .eq("user_id", user.id)
         .order("date", { ascending: false });
+
       if (error) throw error;
 
       const normalized = (data || []).map((rec, idx) => ({
@@ -52,36 +72,45 @@ export default function DateStatus({ darkMode }) {
       setHistory(normalized);
     } catch (err) {
       console.error("Fetch error:", err);
-      toast.error("History-ni olishda xatolik.");
+      toast.error("History-ni olishda xatolik!");
+    } finally {
+      setLoading(false); // ⬅ fetch tugagach progress yo‘qoladi
     }
   };
 
   useEffect(() => {
-    fetchHistory();
-  }, []);
+    if (user) fetchHistory();
+  }, [user]);
 
-  // Delete record
+  const handleAccordionChange = (id) => (event, isExpanded) => {
+    setExpanded(isExpanded ? id : false);
+  };
+
+  // O‘chirish
   const handleDeleteClick = (id) => {
     setDeleteId(id);
     setOpenDelete(true);
   };
+
   const handleConfirmDelete = async () => {
     try {
       const { error } = await supabase
         .from("history")
         .delete()
-        .eq("id", deleteId);
+        .eq("id", deleteId)
+        .eq("user_id", user.id);
       if (error) throw error;
+
       setHistory((prev) => prev.filter((rec) => rec.id !== deleteId));
       setOpenDelete(false);
-      toast.success("Davomat muvaffaqiyatli o'chirildi!");
+      toast.success("Davomat muvaffaqiyatli o‘chirildi!");
     } catch (err) {
       console.error(err);
-      toast.error("O'chirishda xatolik!");
+      toast.error("O‘chirishda xatolik!");
     }
   };
 
-  // Edit student
+  // Tahrirlash
   const handleEditStudent = (record, student) => {
     setParentRecord(record);
     setEditStudent({ ...student });
@@ -89,21 +118,20 @@ export default function DateStatus({ darkMode }) {
 
   const handleSaveStudent = async () => {
     if (!editStudent || !parentRecord) return;
+
     try {
-      // students array ni update qilish
       const updatedStudents = parentRecord.students.map((s) =>
         s.id === editStudent.id ? editStudent : s
       );
 
-      // Supabase update (JSON stringify qilish shart)
       const { error } = await supabase
         .from("history")
         .update({ students: JSON.stringify(updatedStudents) })
-        .eq("id", parentRecord.id);
+        .eq("id", parentRecord.id)
+        .eq("user_id", user.id);
 
       if (error) throw error;
 
-      // Local state update
       setHistory((prev) =>
         prev.map((rec) =>
           rec.id === parentRecord.id
@@ -114,15 +142,11 @@ export default function DateStatus({ darkMode }) {
 
       setEditStudent(null);
       setParentRecord(null);
-      toast.success("O'quvchi muvaffaqiyatli saqlandi!");
+      toast.success("O‘quvchi holati yangilandi!");
     } catch (err) {
       console.error(err);
-      toast.error("Saqlashda xatolik yuz berdi!");
+      toast.error("Saqlashda xatolik!");
     }
-  };
-
-  const handleAccordionChange = (id) => (event, isExpanded) => {
-    setExpanded(isExpanded ? id : false);
   };
 
   return (
@@ -134,99 +158,149 @@ export default function DateStatus({ darkMode }) {
           bgcolor: darkMode ? theme.palette.background.default : "#fff",
           color: darkMode ? theme.palette.text.primary : "#000",
           minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
         }}
       >
         <Typography variant="h6" fontWeight="bold" mb={2}>
           Saqlangan Davomat Tarixlari
         </Typography>
 
-        {history.map((rec) => (
-          <Accordion
-            key={rec.id}
-            expanded={expanded === rec.id}
-            onChange={handleAccordionChange(rec.id)}
-            sx={{
-              mb: 2,
-              bgcolor: darkMode ? theme.palette.background.paper : "#f9f9f9",
-            }}
+        {/* 🔄 Loading spinner */}
+        {loading ? (
+          <Stack
+            direction="column"
+            alignItems="center"
+            justifyContent="center"
+            sx={{ mt: 10 }}
           >
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Stack
-                direction="row"
-                justifyContent="space-between"
-                sx={{ width: "100%" }}
-              >
-                <Typography fontWeight="bold">
-                  {rec.order}. {rec.date} — {rec.group} ({rec.day})
-                </Typography>
-                <Button
-                  variant="outlined"
-                  color="error"
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteClick(rec.id);
-                  }}
+            <CircularProgress />
+            <Typography sx={{ mt: 2 }}>Yuklanmoqda...</Typography>
+          </Stack>
+        ) : history.length === 0 ? (
+          <Stack
+            direction="column"
+            alignItems="center"
+            justifyContent="center"
+            sx={{ mt: 10 }}
+          >
+            <img
+              src="https://cdn-icons-png.flaticon.com/512/2910/2910768.png"
+              alt="Davomat yo'q"
+              width={120}
+              style={{ marginBottom: 16 }}
+            />
+            <Typography variant="body1" color="textSecondary" align="center">
+              Davomat hali saqlanmagan
+            </Typography>
+          </Stack>
+        ) : (
+          history.map((rec) => (
+            <Accordion
+              key={rec.id}
+              expanded={expanded === rec.id}
+              onChange={handleAccordionChange(rec.id)}
+              sx={{
+                width: "100%",
+                mb: 2,
+                bgcolor: darkMode ? theme.palette.background.paper : "#f9f9f9",
+                border:
+                  newRecordId === rec.id
+                    ? "2px solid #4caf50"
+                    : "1px solid #ddd",
+              }}
+            >
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  sx={{ width: "100%" }}
                 >
-                  O'chirish
-                </Button>
-              </Stack>
-            </AccordionSummary>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Typography fontWeight="bold">
+                      {rec.order}. {rec.date} — {rec.group} ({rec.day})
+                    </Typography>
+                    {newRecordId === rec.id && (
+                      <Chip
+                        label="Yangi"
+                        color="info"
+                        size="small"
+                        sx={{ fontWeight: "bold" }}
+                      />
+                    )}
+                  </Stack>
 
-            <AccordionDetails>
-              <div style={{ width: "100%", overflowX: "auto" }}>
-                <Table size="small" sx={{ minWidth: 500 }}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>T/r</TableCell>
-                      <TableCell>O'quvchi ismi</TableCell>
-                      <TableCell>Guruh</TableCell>
-                      <TableCell>Holati</TableCell>
-                      <TableCell>Tahrir</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {rec.students.map((s, i) => (
-                      <TableRow key={s.id || i}>
-                        <TableCell>{i + 1}</TableCell>
-                        <TableCell>{s.fullName}</TableCell>
-                        <TableCell>{s.group || "-"}</TableCell>
-                        <TableCell
-                          style={{
-                            color:
-                              s.status === "keldi"
-                                ? "limegreen"
-                                : s.status === "kelmadi"
-                                ? "salmon"
-                                : s.status === "kechikdi"
-                                ? "orange"
-                                : "gray",
-                          }}
-                        >
-                          {s.status || "belgilanmagan"}{" "}
-                          {s.late ? `(${s.late} daqiqa kech)` : ""}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => handleEditStudent(rec, s)}
-                          >
-                            Tahrirlash
-                          </Button>
-                        </TableCell>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteClick(rec.id);
+                    }}
+                  >
+                    O‘chirish
+                  </Button>
+                </Stack>
+              </AccordionSummary>
+
+              <AccordionDetails>
+                <div style={{ width: "100%", overflowX: "auto" }}>
+                  <Table size="small" sx={{ minWidth: 500 }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>T/r</TableCell>
+                        <TableCell>O‘quvchi ismi</TableCell>
+                        <TableCell>Guruh</TableCell>
+                        <TableCell>Holati</TableCell>
+                        <TableCell>Tahrir</TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </AccordionDetails>
-          </Accordion>
-        ))}
+                    </TableHead>
+                    <TableBody>
+                      {rec.students.map((s, i) => (
+                        <TableRow key={s.id || i}>
+                          <TableCell>{i + 1}</TableCell>
+                          <TableCell>{s.fullName}</TableCell>
+                          <TableCell>{s.group || "-"}</TableCell>
+                          <TableCell
+                            sx={{
+                              color:
+                                s.status === "keldi"
+                                  ? "limegreen"
+                                  : s.status === "kelmadi"
+                                  ? "salmon"
+                                  : s.status === "kechikdi"
+                                  ? "orange"
+                                  : "gray",
+                            }}
+                          >
+                            {s.status || "belgilanmagan"}{" "}
+                            {s.late ? `(${s.late} daqiqa kech)` : ""}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => handleEditStudent(rec, s)}
+                            >
+                              Tahrirlash
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </AccordionDetails>
+            </Accordion>
+          ))
+        )}
 
-        {/* Edit Student Dialog */}
+        {/* ✏️ Tahrirlash oynasi */}
         <Dialog open={!!editStudent} onClose={() => setEditStudent(null)}>
-          <DialogTitle>O'quvchini tahrirlash</DialogTitle>
+          <DialogTitle>O‘quvchini tahrirlash</DialogTitle>
           {editStudent && (
             <DialogContent
               sx={{ display: "flex", flexDirection: "column", gap: 2 }}
@@ -276,16 +350,16 @@ export default function DateStatus({ darkMode }) {
           </DialogActions>
         </Dialog>
 
-        {/* Delete Dialog */}
+        {/* 🗑️ O‘chirish oynasi */}
         <Dialog open={openDelete} onClose={() => setOpenDelete(false)}>
           <DialogTitle>Tasdiqlash</DialogTitle>
           <DialogContent>
-            Rostan ham ushbu davomatni o'chirmoqchimisiz?
+            Rostan ham ushbu davomatni o‘chirmoqchimisiz?
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setOpenDelete(false)}>Bekor qilish</Button>
             <Button color="error" onClick={handleConfirmDelete}>
-              Ha, o'chirish
+              Ha, o‘chirish
             </Button>
           </DialogActions>
         </Dialog>
