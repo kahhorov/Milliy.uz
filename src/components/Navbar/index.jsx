@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+// src/components/Navbar.jsx
+import React, { useState } from "react";
 import {
   AppBar,
   Toolbar,
@@ -8,7 +9,6 @@ import {
   Avatar,
   Menu,
   MenuItem,
-  Divider,
   Drawer,
   Typography,
   List,
@@ -18,7 +18,7 @@ import {
   ListItemText,
   useTheme,
 } from "@mui/material";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import MenuIcon from "@mui/icons-material/Menu";
 import SchoolIcon from "@mui/icons-material/School";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
@@ -26,17 +26,14 @@ import HistoryIcon from "@mui/icons-material/History";
 import { MdDarkMode, MdLightMode } from "react-icons/md";
 import SaveIcon from "@mui/icons-material/Save";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
-import LogoutIcon from "@mui/icons-material/Logout";
 import PersonIcon from "@mui/icons-material/Person";
 import * as XLSX from "xlsx";
-import { useAuth } from "../../context/AuthContext";
-import { supabase } from "../../supabaseClient";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "../firebase"; // Firebase import
 
 export default function Navbar({ darkMode, setDarkMode }) {
   const theme = useTheme();
-  const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, userAvatar } = useAuth();
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
@@ -82,57 +79,41 @@ export default function Navbar({ darkMode, setDarkMode }) {
     </Box>
   );
 
-  useEffect(() => {
-    const savedMode = JSON.parse(localStorage.getItem("darkMode"));
-    if (savedMode !== null) setDarkMode(savedMode);
-  }, [setDarkMode]);
-
   const handleSave = () => {
     localStorage.setItem("darkMode", JSON.stringify(darkMode));
     alert("Sozlamalar saqlandi!");
   };
 
   const handleExportExcel = async () => {
-    if (!user) return;
+    try {
+      const querySnapshot = await getDocs(collection(db, "lists"));
+      const data = querySnapshot.docs.map(doc => doc.data());
 
-    const { data, error } = await supabase
-      .from("lists")
-      .select("fullName, phoneNumber, group, weekDays")
-      .eq("user_id", user.id)
-      .order("group", { ascending: true })
-      .order("id", { ascending: true });
+      const exportData = data.map((r, index) => ({
+        "№": index + 1,
+        "Ism Familiya": r.fullName,
+        Telefon: r.phoneNumber,
+        Guruh: r.group,
+        "Hafta kunlari": Array.isArray(r.weekDays)
+          ? r.weekDays.join(", ")
+          : r.weekDays,
+      }));
 
-    if (error) {
-      alert("Excelga export qilishda xatolik!");
-      return;
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      ws["!cols"] = [
+        { wch: 5 },
+        { wch: 20 },
+        { wch: 15 },
+        { wch: 10 },
+        { wch: 30 },
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Oquvchilar");
+      XLSX.writeFile(wb, "Oquvchilar.xlsx");
+    } catch (error) {
+      console.error(error);
+      alert("Excelga yuklashda xatolik!");
     }
-
-    const exportData = data.map((r, index) => ({
-      "№": index + 1,
-      "Ism Familiya": r.fullName,
-      Telefon: r.phoneNumber,
-      Guruh: r.group,
-      "Hafta kunlari": Array.isArray(r.weekDays)
-        ? r.weekDays.join(", ")
-        : r.weekDays,
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    ws["!cols"] = [
-      { wch: 5 },
-      { wch: 20 },
-      { wch: 15 },
-      { wch: 10 },
-      { wch: 30 },
-    ];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Oquvchilar");
-    XLSX.writeFile(wb, "Oquvchilar.xlsx");
-  };
-
-  const handleLogout = async () => {
-    if (logout) await logout();
-    navigate("/login");
   };
 
   return (
@@ -144,6 +125,7 @@ export default function Navbar({ darkMode, setDarkMode }) {
           bgcolor: theme.palette.mode === "dark" ? "#121212" : "#fff",
           color: theme.palette.mode === "dark" ? "#fff" : "#000",
           borderBottom: `1px solid ${theme.palette.divider}`,
+          zIndex: (theme) => theme.zIndex.drawer + 1 
         }}
       >
         <Toolbar sx={{ justifyContent: "space-between" }}>
@@ -187,58 +169,42 @@ export default function Navbar({ darkMode, setDarkMode }) {
               {darkMode ? <MdLightMode /> : <MdDarkMode />}
             </IconButton>
 
-            {user && (
-              <Box>
-                <IconButton onClick={handleMenuOpen} size="small">
-                  <Avatar sx={{ width: 32, height: 32 }} src={userAvatar || ""}>
-                    {!userAvatar && user.email.charAt(0).toUpperCase()}
-                  </Avatar>
-                </IconButton>
+            <Box>
+              <IconButton onClick={handleMenuOpen} size="small">
+                <Avatar sx={{ width: 32, height: 32, bgcolor: "primary.main" }}>
+                  A
+                </Avatar>
+              </IconButton>
 
-                <Menu
-                  anchorEl={anchorEl}
-                  open={open}
-                  onClose={handleMenuClose}
-                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                  transformOrigin={{ vertical: "top", horizontal: "right" }}
-                  PaperProps={{ sx: { minWidth: 180 } }}
+              <Menu
+                anchorEl={anchorEl}
+                open={open}
+                onClose={handleMenuClose}
+                anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                transformOrigin={{ vertical: "top", horizontal: "right" }}
+                PaperProps={{ sx: { minWidth: 180 } }}
+              >
+                <MenuItem disabled>
+                  <PersonIcon sx={{ mr: 1 }} /> Admin
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    handleSave();
+                    handleMenuClose();
+                  }}
                 >
-                  <MenuItem
-                    onClick={() => {
-                      navigate("/profile");
-                      handleMenuClose();
-                    }}
-                  >
-                    <PersonIcon sx={{ mr: 1 }} /> Profile
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => {
-                      handleSave();
-                      handleMenuClose();
-                    }}
-                  >
-                    <SaveIcon sx={{ mr: 1 }} /> Saqlash
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => {
-                      handleExportExcel();
-                      handleMenuClose();
-                    }}
-                  >
-                    <FileDownloadIcon sx={{ mr: 1 }} /> Excelga export
-                  </MenuItem>
-                  <Divider />
-                  <MenuItem
-                    onClick={() => {
-                      handleLogout();
-                      handleMenuClose();
-                    }}
-                  >
-                    <LogoutIcon sx={{ mr: 1 }} /> Logout
-                  </MenuItem>
-                </Menu>
-              </Box>
-            )}
+                  <SaveIcon sx={{ mr: 1 }} /> Sozlamalarni saqlash
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    handleExportExcel();
+                    handleMenuClose();
+                  }}
+                >
+                  <FileDownloadIcon sx={{ mr: 1 }} /> Excelga export
+                </MenuItem>
+              </Menu>
+            </Box>
           </Box>
         </Toolbar>
       </AppBar>

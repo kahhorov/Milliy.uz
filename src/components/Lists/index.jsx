@@ -1,3 +1,4 @@
+// src/components/Lists.jsx
 import React, { useState, useEffect, useMemo } from "react";
 import {
   Paper,
@@ -17,11 +18,17 @@ import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { Edit, Delete } from "@mui/icons-material";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { useAuth } from "../../context/AuthContext";
-import { supabase } from "../../supabaseClient";
+import { db } from "../firebase";
+import { 
+  collection, 
+  addDoc, 
+  getDocs, 
+  updateDoc, 
+  deleteDoc, 
+  doc 
+} from "firebase/firestore";
 
 function Lists() {
-  const { user } = useAuth();
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState({
     fullName: "",
@@ -44,47 +51,34 @@ function Lists() {
     "Yakshanba",
   ];
 
-  // --- Ma'lumotlarni Supabase'dan olish ---
-  const getData = async () => {
-    if (!user) return;
-    const { data, error } = await supabase
-      .from("lists")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("id", { ascending: true });
+  const listsCollectionRef = collection(db, "lists");
 
-    if (error) {
+  // --- Ma'lumotlarni Firebase'dan olish ---
+  const getData = async () => {
+    try {
+      const data = await getDocs(listsCollectionRef);
+      const savedChecks = JSON.parse(localStorage.getItem("checkedRows") || "{}");
+
+      const merged = data.docs.map((doc) => {
+        const r = doc.data();
+        return {
+          ...r,
+          id: doc.id, // Firestore ID
+          checked: savedChecks[doc.id] || false,
+        };
+      });
+
+      // ID bo'yicha saralash (ixtiyoriy, Firestore tartibsiz qaytarishi mumkin)
+      setRows(merged);
+    } catch (error) {
       console.error(error);
       toast.error("Ma'lumotlarni olishda xatolik!");
-      return;
     }
-
-    const savedChecks = JSON.parse(localStorage.getItem("checkedRows") || "{}");
-
-    const merged = data.map((r) => {
-      let weekDaysArray = [];
-      if (r.weekDays) {
-        try {
-          weekDaysArray = JSON.parse(r.weekDays); // JSON string -> Array
-        } catch (e) {
-          weekDaysArray = Array.isArray(r.weekDays)
-            ? r.weekDays
-            : r.weekDays.split(",").map((d) => d.trim());
-        }
-      }
-      return {
-        ...r,
-        checked: savedChecks[r.id] || false,
-        weekDays: weekDaysArray,
-      };
-    });
-
-    setRows(merged);
   };
 
   useEffect(() => {
     getData();
-  }, [user]);
+  }, []);
 
   const updateLocalChecks = (updatedRows) => {
     const checks = {};
@@ -114,14 +108,12 @@ function Lists() {
     if (name === "group") {
       const formattedGroup =
         value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+      // Guruh bo'yicha oldingi sozlamalarni qidirish (logic UI uchun)
       const lastInGroup = rows
         .filter((r) => r.group === formattedGroup)
-        .sort((a, b) => b.id - a.id)[0];
-      const weekDaysArray = lastInGroup
-        ? Array.isArray(lastInGroup.weekDays)
-          ? lastInGroup.weekDays
-          : lastInGroup.weekDays.split(",").map((d) => d.trim())
-        : [];
+        .pop(); // eng oxirgisini olamiz
+      
+      const weekDaysArray = lastInGroup ? lastInGroup.weekDays : [];
       setForm((prev) => ({
         ...prev,
         group: formattedGroup,
@@ -159,26 +151,18 @@ function Lists() {
     }
 
     try {
-      const weekDaysString = JSON.stringify(form.weekDays); // Array -> JSON string
-
       if (editingId) {
-        const { error } = await supabase
-          .from("lists")
-          .update({ ...form, weekDays: weekDaysString })
-          .eq("id", editingId);
-        if (error) throw error;
+        const userDoc = doc(db, "lists", editingId);
+        await updateDoc(userDoc, form);
         toast.success("Ma'lumot tahrirlandi!");
         setEditingId(null);
       } else {
-        const { error } = await supabase
-          .from("lists")
-          .insert([{ ...form, user_id: user.id, weekDays: weekDaysString }]);
-        if (error) throw error;
+        await addDoc(listsCollectionRef, form);
         toast.success("Ma'lumot qo'shildi!");
       }
 
       setForm({ fullName: "", phoneNumber: "", group: "", weekDays: [] });
-      await getData();
+      getData();
     } catch (error) {
       console.error(error);
       toast.error("Xatolik yuz berdi!");
@@ -194,32 +178,22 @@ function Lists() {
   };
 
   const handleEdit = (row) => {
-    let weekDaysArray = [];
-    if (row.weekDays) {
-      try {
-        weekDaysArray = JSON.parse(row.weekDays);
-      } catch (e) {
-        weekDaysArray = Array.isArray(row.weekDays)
-          ? row.weekDays
-          : row.weekDays.split(",").map((d) => d.trim());
-      }
-    }
-
     setForm({
       fullName: row.fullName,
       phoneNumber: row.phoneNumber,
       group: row.group,
-      weekDays: weekDaysArray,
+      weekDays: row.weekDays || [],
     });
     setEditingId(row.id);
   };
 
   const handleDelete = async (id) => {
+    if(!window.confirm("Rostdan ham o'chirmoqchimisiz?")) return;
     try {
-      const { error } = await supabase.from("lists").delete().eq("id", id);
-      if (error) throw error;
+      const userDoc = doc(db, "lists", id);
+      await deleteDoc(userDoc);
       toast.info("Ma'lumot o'chirildi!");
-      await getData();
+      getData();
     } catch (error) {
       console.error(error);
       toast.error("O'chirishda xatolik!");
@@ -377,7 +351,7 @@ function Lists() {
         pageSizeOptions={[10, 20, 50]}
         disableRowSelectionOnClick
         slots={{ toolbar: GridToolbar }}
-      />{" "}
+      />
     </Paper>
   );
 }

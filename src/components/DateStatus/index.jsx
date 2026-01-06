@@ -1,3 +1,4 @@
+// src/components/DateStatus.jsx
 import React, { useEffect, useState } from "react";
 import {
   Paper,
@@ -22,7 +23,14 @@ import {
   useTheme,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import { supabase } from "../../supabaseClient";
+import { db } from "../firebase";
+import { 
+  collection, 
+  getDocs, 
+  deleteDoc, 
+  doc, 
+  updateDoc 
+} from "firebase/firestore";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -33,40 +41,24 @@ export default function DateStatus({ darkMode }) {
   const [parentRecord, setParentRecord] = useState(null);
   const [openDelete, setOpenDelete] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
-  const [newRecordId, setNewRecordId] = useState(null);
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true); // ⬅ progress uchun state
+  const [loading, setLoading] = useState(true);
   const theme = useTheme();
-
-  // 🔑 Foydalanuvchini olish
-  useEffect(() => {
-    const getUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      setUser(user);
-    };
-    getUser();
-  }, []);
 
   // 🟢 History-ni olish
   const fetchHistory = async () => {
-    if (!user) return;
-    setLoading(true); // ⬅ fetch boshlanganda progress
+    setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("history")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("date", { ascending: false });
+      const querySnapshot = await getDocs(collection(db, "history"));
+      const data = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
 
-      if (error) throw error;
+      // Sana bo'yicha kamayish tartibida saralash (eng yangisi tepada)
+      data.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-      const normalized = (data || []).map((rec, idx) => ({
+      const normalized = data.map((rec, idx) => ({
         ...rec,
-        id: String(rec.id),
         order: idx + 1,
-        students: rec.students ? JSON.parse(rec.students) : [],
+        // Firebasega JSON string qilib saqlagandik, uni parse qilamiz
+        students: typeof rec.students === 'string' ? JSON.parse(rec.students) : rec.students,
       }));
 
       setHistory(normalized);
@@ -74,13 +66,13 @@ export default function DateStatus({ darkMode }) {
       console.error("Fetch error:", err);
       toast.error("History-ni olishda xatolik!");
     } finally {
-      setLoading(false); // ⬅ fetch tugagach progress yo‘qoladi
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (user) fetchHistory();
-  }, [user]);
+    fetchHistory();
+  }, []);
 
   const handleAccordionChange = (id) => (event, isExpanded) => {
     setExpanded(isExpanded ? id : false);
@@ -94,13 +86,7 @@ export default function DateStatus({ darkMode }) {
 
   const handleConfirmDelete = async () => {
     try {
-      const { error } = await supabase
-        .from("history")
-        .delete()
-        .eq("id", deleteId)
-        .eq("user_id", user.id);
-      if (error) throw error;
-
+      await deleteDoc(doc(db, "history", deleteId));
       setHistory((prev) => prev.filter((rec) => rec.id !== deleteId));
       setOpenDelete(false);
       toast.success("Davomat muvaffaqiyatli o‘chirildi!");
@@ -124,13 +110,8 @@ export default function DateStatus({ darkMode }) {
         s.id === editStudent.id ? editStudent : s
       );
 
-      const { error } = await supabase
-        .from("history")
-        .update({ students: JSON.stringify(updatedStudents) })
-        .eq("id", parentRecord.id)
-        .eq("user_id", user.id);
-
-      if (error) throw error;
+      const recordDoc = doc(db, "history", parentRecord.id);
+      await updateDoc(recordDoc, { students: JSON.stringify(updatedStudents) });
 
       setHistory((prev) =>
         prev.map((rec) =>
@@ -167,7 +148,6 @@ export default function DateStatus({ darkMode }) {
           Saqlangan Davomat Tarixlari
         </Typography>
 
-        {/* 🔄 Loading spinner */}
         {loading ? (
           <Stack
             direction="column"
@@ -185,12 +165,6 @@ export default function DateStatus({ darkMode }) {
             justifyContent="center"
             sx={{ mt: 10 }}
           >
-            <img
-              src="https://cdn-icons-png.flaticon.com/512/2910/2910768.png"
-              alt="Davomat yo'q"
-              width={120}
-              style={{ marginBottom: 16 }}
-            />
             <Typography variant="body1" color="textSecondary" align="center">
               Davomat hali saqlanmagan
             </Typography>
@@ -205,10 +179,7 @@ export default function DateStatus({ darkMode }) {
                 width: "100%",
                 mb: 2,
                 bgcolor: darkMode ? theme.palette.background.paper : "#f9f9f9",
-                border:
-                  newRecordId === rec.id
-                    ? "2px solid #4caf50"
-                    : "1px solid #ddd",
+                border: "1px solid #ddd",
               }}
             >
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -222,14 +193,6 @@ export default function DateStatus({ darkMode }) {
                     <Typography fontWeight="bold">
                       {rec.order}. {rec.date} — {rec.group} ({rec.day})
                     </Typography>
-                    {newRecordId === rec.id && (
-                      <Chip
-                        label="Yangi"
-                        color="info"
-                        size="small"
-                        sx={{ fontWeight: "bold" }}
-                      />
-                    )}
                   </Stack>
 
                   <Button
@@ -298,7 +261,6 @@ export default function DateStatus({ darkMode }) {
           ))
         )}
 
-        {/* ✏️ Tahrirlash oynasi */}
         <Dialog open={!!editStudent} onClose={() => setEditStudent(null)}>
           <DialogTitle>O‘quvchini tahrirlash</DialogTitle>
           {editStudent && (
@@ -350,7 +312,6 @@ export default function DateStatus({ darkMode }) {
           </DialogActions>
         </Dialog>
 
-        {/* 🗑️ O‘chirish oynasi */}
         <Dialog open={openDelete} onClose={() => setOpenDelete(false)}>
           <DialogTitle>Tasdiqlash</DialogTitle>
           <DialogContent>

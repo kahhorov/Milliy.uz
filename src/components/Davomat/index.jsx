@@ -1,3 +1,4 @@
+// src/components/Davomat.jsx
 import React, { useState, useEffect, useMemo } from "react";
 import {
   Paper,
@@ -12,54 +13,41 @@ import { DataGrid } from "@mui/x-data-grid";
 import { Save } from "@mui/icons-material";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
-import { supabase } from "../../supabaseClient";
+import { db } from "../firebase";
+import { collection, getDocs, addDoc } from "firebase/firestore";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 export default function Davomat({ darkMode }) {
   const theme = useTheme();
-  const [user, setUser] = useState(null);
   const [students, setStudents] = useState([]);
   const [rows, setRows] = useState([]);
   const [filter, setFilter] = useState({ group: "", day: "" });
   const [disabledStatus, setDisabledStatus] = useState({});
   const [blockedGroups, setBlockedGroups] = useState({});
 
-  // 1️⃣ Foydalanuvchini olish
+  // 1️⃣ O‘quvchilarni olish (Firestore "lists")
   useEffect(() => {
-    const fetchUser = async () => {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser();
-      if (error || !user) return toast.error("Foydalanuvchi topilmadi!");
-      setUser(user);
-    };
-    fetchUser();
-  }, []);
-
-  // 2️⃣ O‘quvchilarni olish
-  useEffect(() => {
-    if (!user) return;
     const fetchStudents = async () => {
-      const { data, error } = await supabase
-        .from("lists")
-        .select('id, fullName, "group", weekDays, user_id')
-        .eq("user_id", user.id);
-      if (error) return toast.error("O‘quvchilarni olishda xatolik!");
-      setStudents(data || []);
+      try {
+        const querySnapshot = await getDocs(collection(db, "lists"));
+        const data = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        setStudents(data);
+      } catch (error) {
+        toast.error("O‘quvchilarni olishda xatolik!");
+      }
     };
     fetchStudents();
-  }, [user]);
+  }, []);
 
-  // 3️⃣ Guruhlarni chiqarish
+  // 2️⃣ Guruhlarni chiqarish
   const groups = useMemo(() => {
     return Array.from(
       new Set(students.map((s) => s.group?.trim()).filter(Boolean))
     );
   }, [students]);
 
-  // 4️⃣ Filtr bo‘yicha o‘quvchilarni ajratish
+  // 3️⃣ Filtr bo‘yicha o‘quvchilarni ajratish
   useEffect(() => {
     if (!filter.group || !filter.day) {
       setRows([]);
@@ -68,14 +56,7 @@ export default function Davomat({ darkMode }) {
 
     const filtered = students
       .filter((s) => {
-        let weekDays = [];
-        try {
-          weekDays = Array.isArray(s.weekDays)
-            ? s.weekDays
-            : JSON.parse(s.weekDays || "[]");
-        } catch (e) {
-          console.error("weekDays parse error:", e);
-        }
+        let weekDays = s.weekDays || [];
         return s.group === filter.group && weekDays.includes(filter.day);
       })
       .map((s, index) => ({
@@ -89,10 +70,10 @@ export default function Davomat({ darkMode }) {
     setRows(filtered);
   }, [filter, students]);
 
-  // 5️⃣ Davomatni belgilash
+  // 4️⃣ Davomatni belgilash
   const handleAttendance = (id, status) => {
     const todayStr = new Date().toISOString().split("T")[0];
-    if (isBlocked(filter.group, todayStr)) return; // bloklangan bo'lsa, hech narsa qilmasin
+    if (isBlocked(filter.group, todayStr)) return;
 
     setDisabledStatus((prev) => ({ ...prev, [id]: status }));
     setRows((prev) =>
@@ -104,38 +85,38 @@ export default function Davomat({ darkMode }) {
     );
   };
 
-  // 6️⃣ Avval saqlangan davomatlarni olish va bloklash + auto update
+  // 5️⃣ History'dan bloklanganlarni tekshirish
   useEffect(() => {
-    if (!user) return;
-
     const fetchHistory = async () => {
-      const { data, error } = await supabase
-        .from("history")
-        .select("*")
-        .order("created_at", { ascending: false });
+      try {
+        const querySnapshot = await getDocs(collection(db, "history"));
+        const data = querySnapshot.docs.map(doc => doc.data());
+        
+        const newBlocked = {};
+        const now = new Date();
 
-      if (error) return;
+        data.forEach((h) => {
+          // Firestore timestamp yoki ISO string bo'lishi mumkin
+          // Biz quyida ISO string qilib saqlaymiz, shuning uchun new Date(h.created_at) ishlaydi
+          const createdAt = new Date(h.created_at);
+          const diffHrs = (now - createdAt) / (1000 * 60 * 60);
+          
+          if (diffHrs < 20) {
+            const key = `${h.group}-${h.date}`;
+            newBlocked[key] = createdAt.getTime() + 20 * 60 * 60 * 1000;
+          }
+        });
 
-      const newBlocked = {};
-      const now = new Date();
-
-      data.forEach((h) => {
-        const createdAt = new Date(h.created_at);
-        const diffHrs = (now - createdAt) / (1000 * 60 * 60);
-        if (diffHrs < 20) {
-          const key = `${h.group}-${h.date}`;
-          newBlocked[key] = createdAt.getTime() + 20 * 60 * 60 * 1000;
-        }
-      });
-
-      setBlockedGroups(newBlocked);
+        setBlockedGroups(newBlocked);
+      } catch (error) {
+        console.error("History fetch error", error);
+      }
     };
 
     fetchHistory();
-
-    const interval = setInterval(fetchHistory, 60 * 1000); // har 1 daqiqa tekshirish
+    const interval = setInterval(fetchHistory, 60 * 1000);
     return () => clearInterval(interval);
-  }, [user]);
+  }, []);
 
   const isBlocked = (group, date) => {
     const key = `${group}-${date}`;
@@ -151,11 +132,10 @@ export default function Davomat({ darkMode }) {
     return { hours: diffHrs, minutes: diffMin };
   };
 
-  // 7️⃣ Saqlash Supabase history jadvaliga
+  // 6️⃣ Saqlash
   const handleSaveAttendance = async () => {
     if (!filter.group || !filter.day || rows.length === 0)
       return toast.warning("Avval guruh va hafta kunini tanlang!");
-    if (!user) return toast.error("Foydalanuvchi aniqlanmadi!");
 
     const todayStr = new Date().toISOString().split("T")[0];
 
@@ -168,24 +148,18 @@ export default function Davomat({ darkMode }) {
 
     try {
       const historyData = {
-        user_id: user.id,
         group: filter.group,
         day: filter.day,
         date: todayStr,
-        students: JSON.stringify(rows),
+        created_at: new Date().toISOString(), // Vaqtni saqlash
+        students: JSON.stringify(rows), // Obyektlarni string qilib saqlash (oson o'qish uchun)
       };
 
-      const { data, error } = await supabase
-        .from("history")
-        .insert([historyData])
-        .select();
-
-      if (error) throw error;
+      await addDoc(collection(db, "history"), historyData);
 
       toast.success("Davomat muvaffaqiyatli saqlandi!");
       setDisabledStatus({});
 
-      // yangi tarixni qo'shish va blokni yangilash
       const newBlocked = { ...blockedGroups };
       newBlocked[`${filter.group}-${todayStr}`] =
         new Date().getTime() + 20 * 60 * 60 * 1000;
